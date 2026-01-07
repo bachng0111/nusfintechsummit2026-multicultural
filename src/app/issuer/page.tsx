@@ -3,7 +3,6 @@
 import { useState, useCallback } from 'react'
 import { WalletConnectButton, useWallet } from '@/components/XRPLProvider'
 import * as xrpl from 'xrpl'
-
 // XRPL Devnet configuration
 const DEVNET_EXPLORER_URL = 'https://devnet.xrpl.org'
 
@@ -142,26 +141,26 @@ export default function IssuerPage() {
 
       // Build metadata following XLS-89 schema
       const mptMetadata = {
-        t: tokenTicker.toUpperCase(),
-        n: projectName,
-        d: `Carbon credit token for ${projectName}. Audit report available via IPFS.`,
-        i: 'https://example.org/carbon-icon.png',
-        ac: 'rwa',
-        as: 'carbon',
-        in: 'CarbonLedger',
-        us: [
+        ticker: tokenTicker.toUpperCase(),
+        name: projectName,
+        desc: `Carbon credit token for ${projectName}. Audit report available via IPFS.`,
+        icon: 'https://example.org/carbon-icon.png',
+        asset_class: 'rwa',
+        asset_subclass: 'other',
+        issuer_name: 'CarbonLedger',
+        uris: [
           {
-            u: `ipfs://${ipfsHash}`,
-            c: 'docs',
-            t: 'Audit Report'
+            uri: `ipfs://${ipfsHash}`,
+            category: 'docs',
+            title: 'Audit Report'
           },
           {
-            u: 'https://carbonledger.example.com',
-            c: 'website', 
-            t: 'CarbonLedger Platform'
+            uri: 'https://carbonledger.example.com',
+            category: 'website', 
+            title: 'CarbonLedger Platform'
           }
         ],
-        ai: {
+        additional_info: {
           carbon_tons: amount,
           project_name: projectName,
           verification_date: new Date().toISOString().split('T')[0],
