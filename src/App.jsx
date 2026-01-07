@@ -4,6 +4,7 @@ import SummaryCards from './components/SummaryCards.jsx';
 import Filters from './components/Filters.jsx';
 import TokenTable from './components/TokenTable.jsx';
 import TokenDetail from './components/TokenDetail.jsx';
+import LiveStream from './components/LiveStream.jsx';
 import {
   getEvents,
   getEventsByToken,
@@ -104,6 +105,7 @@ const App = () => {
         onChange={handleFilterChange}
         onReset={handleReset}
       />
+      <LiveStream />
       <div className="layout">
         <TokenTable
           tokens={filteredTokens}

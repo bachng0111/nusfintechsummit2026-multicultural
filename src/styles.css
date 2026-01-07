@@ -166,6 +166,81 @@ select {
   gap: 24px;
 }
 
+.stream-card {
+  background: var(--card);
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+  margin-bottom: 24px;
+}
+
+.stream-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.stream-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.stream-status {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.stream-status.online {
+  border-color: rgba(31, 122, 92, 0.4);
+  color: var(--accent-dark);
+}
+
+.stream-list ul {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.stream-list li {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfdfb;
+  display: grid;
+  gap: 6px;
+}
+
+.stream-type {
+  font-weight: 600;
+}
+
+.stream-date {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-left: 12px;
+}
+
+.stream-hash,
+.stream-account {
+  font-size: 0.85rem;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.stream-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .table-card,
 .detail-card {
   background: var(--card);
@@ -388,5 +463,15 @@ tr.active {
 
   .layout {
     grid-template-columns: 1fr;
+  }
+
+  .stream-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .stream-actions {
+    align-items: flex-start;
+    flex-direction: row;
   }
 }

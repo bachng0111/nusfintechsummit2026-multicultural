@@ -13,6 +13,8 @@ const TokenDetail = ({ token, events }) => {
 
   const certification = events.find((event) => event.type === 'OffsetCertified');
   const retirement = events.find((event) => event.type === 'Retired');
+  const getExplorerUrl = (txHash) =>
+    txHash ? `https://livenet.xrpl.org/transactions/${txHash}` : '';
 
   return (
     <section className="detail-card">
@@ -72,6 +74,15 @@ const TokenDetail = ({ token, events }) => {
               </div>
               <p>{event.details}</p>
               <span className="event-meta">Actor: {event.actor}</span>
+              {event.txHash ? (
+                <span className="event-meta">
+                  <a href={getExplorerUrl(event.txHash)} target="_blank" rel="noreferrer">
+                    View on XRPL Explorer
+                  </a>
+                  {' · '}
+                  Tx hash: {event.txHash}
+                </span>
+              ) : null}
             </li>
           ))}
         </ul>
