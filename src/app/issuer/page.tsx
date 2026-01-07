@@ -5,7 +5,7 @@ import { WalletConnectButton, useWallet } from '@/components/XRPLProvider'
 import * as xrpl from 'xrpl'
 
 // XRPL Devnet configuration
-const DEVNET_EXPLORER_URL = 'https://devnet.xrpl.org/transactions'
+const DEVNET_EXPLORER_URL = 'https://devnet.xrpl.org'
 
 /**
  * Mock IPFS Upload Function
@@ -23,44 +23,54 @@ async function mockUploadToIPFS(file: File): Promise<string> {
 }
 
 /**
- * Convert a string to Hex (for XRPL Domain field)
+ * Encode MPToken metadata using official xrpl.js function
+ * This ensures proper XLS-89 compliance
  */
-function stringToHex(str: string): string {
+function encodeMPTokenMetadata(metadata: Record<string, unknown>): string {
+  // Use the official xrpl.js encoding function if available
+  if ('encodeMPTokenMetadata' in xrpl) {
+    return (xrpl as any).encodeMPTokenMetadata(metadata)
+  }
+  
+  // Fallback to manual encoding
+  const keyMap: Record<string, string> = {
+    ticker: 't',
+    name: 'n', 
+    desc: 'd',
+    icon: 'i',
+    asset_class: 'ac',
+    asset_subclass: 'as',
+    issuer_name: 'in',
+    uris: 'u',
+    additional_info: 'ai',
+  }
+
+  const compactMetadata: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(metadata)) {
+    const compactKey = keyMap[key] || key
+    compactMetadata[compactKey] = value
+  }
+
+  const jsonString = JSON.stringify(compactMetadata)
   let hex = ''
-  for (let i = 0; i < str.length; i++) {
-    hex += str.charCodeAt(i).toString(16).padStart(2, '0')
+  for (let i = 0; i < jsonString.length; i++) {
+    hex += jsonString.charCodeAt(i).toString(16).padStart(2, '0')
   }
   return hex.toUpperCase()
 }
 
-/**
- * Pad currency code to 40 hex characters (for non-standard currency codes)
- * XRPL requires currency codes to be either:
- * - 3 ASCII characters (standard like "USD")
- * - 40 hex characters (160 bits) for custom tokens
- */
-function formatCurrencyCode(ticker: string): string {
-  if (ticker.length === 3) {
-    return ticker.toUpperCase()
-  }
-  // For longer codes, convert to hex and pad to 40 characters
-  let hex = ''
-  for (let i = 0; i < ticker.length; i++) {
-    hex += ticker.charCodeAt(i).toString(16).padStart(2, '0')
-  }
-  return hex.toUpperCase().padEnd(40, '0')
-}
-
-type MintStatus = 'idle' | 'uploading' | 'setting-domain' | 'creating-distribution' | 'setting-trustline' | 'minting' | 'success' | 'error'
+type MintStatus = 'idle' | 'uploading' | 'creating-mpt' | 'success' | 'error'
 
 interface MintResult {
-  accountSetTxHash?: string
-  trustSetTxHash?: string
-  paymentTxHash?: string
+  mptIssuanceId?: string
+  txHash?: string
   ipfsHash?: string
-  distributionWallet?: string
   error?: string
 }
+
+// MPTokenIssuanceCreate flags
+const MPT_CAN_TRANSFER = 0x00000020
+const MPT_CAN_TRADE = 0x00000010
 
 export default function IssuerPage() {
   // Form state
@@ -108,6 +118,12 @@ export default function IssuerPage() {
       return
     }
 
+    // Validate ticker (max 6 chars, uppercase alphanumeric recommended)
+    if (tokenTicker.length > 6) {
+      alert('Token ticker should be max 6 characters')
+      return
+    }
+
     setStatus('uploading')
     setResult({})
 
@@ -121,82 +137,92 @@ export default function IssuerPage() {
       // Step 2: Connect to XRPL
       client = await getClient()
 
-      // Step 3: Create AccountSet transaction to set Domain
-      setStatus('setting-domain')
-      
-      // Create metadata URL and convert to hex
-      const metadataUrl = `ipfs://${ipfsHash}`
-      const domainHex = stringToHex(metadataUrl)
+      // Step 3: Create MPTokenIssuanceCreate transaction
+      setStatus('creating-mpt')
 
-      const accountSetTx = {
-        TransactionType: 'AccountSet' as const,
-        Account: address,
-        Domain: domainHex,
+      // Build metadata following XLS-89 schema
+      const mptMetadata = {
+        t: tokenTicker.toUpperCase(),
+        n: projectName,
+        d: `Carbon credit token for ${projectName}. Audit report available via IPFS.`,
+        i: 'https://example.org/carbon-icon.png',
+        ac: 'rwa',
+        as: 'carbon',
+        in: 'CarbonLedger',
+        us: [
+          {
+            u: `ipfs://${ipfsHash}`,
+            c: 'docs',
+            t: 'Audit Report'
+          },
+          {
+            u: 'https://carbonledger.example.com',
+            c: 'website', 
+            t: 'CarbonLedger Platform'
+          }
+        ],
+        ai: {
+          carbon_tons: amount,
+          project_name: projectName,
+          verification_date: new Date().toISOString().split('T')[0],
+          standard: 'VCS',
+          methodology: 'VM0007',
+          registry: 'Verra'
+        }
       }
+
+      // Encode metadata to hex
+      const mptMetadataHex = encodeMPTokenMetadata(mptMetadata)
+      
+      // Check metadata size (1024 byte limit)
+      if (mptMetadataHex.length / 2 > 1024) {
+        throw new Error('Metadata exceeds 1024 byte limit. Please shorten project name or description.')
+      }
+
+      console.log('[MPT] Encoded metadata hex:', mptMetadataHex)
+      console.log('[MPT] Metadata size:', mptMetadataHex.length / 2, 'bytes')
+
+      // Convert amount to integer (using AssetScale of 2 for carbon credits)
+      // e.g., 1000 tons becomes 100000 (with 2 decimal places)
+      const maxAmount = Math.floor(mintAmount * 100).toString()
+
+      // Create MPTokenIssuanceCreate transaction
+      const mptIssuanceCreate = {
+        TransactionType: 'MPTokenIssuanceCreate' as const,
+        Account: address,
+        AssetScale: 2, // 2 decimal places for carbon credits
+        MaximumAmount: maxAmount,
+        TransferFee: 0, // No transfer fee
+        Flags:  MPT_CAN_TRANSFER | MPT_CAN_TRADE,
+        MPTokenMetadata: mptMetadataHex
+      }
+
+      console.log('[MPT] Transaction:', JSON.stringify(mptIssuanceCreate, null, 2))
 
       // Autofill, sign, and submit
-      const preparedAccountSet = await client.autofill(accountSetTx)
-      const signedAccountSet = wallet.sign(preparedAccountSet)
-      const accountSetResult = await client.submitAndWait(signedAccountSet.tx_blob)
-      
-      const accountSetTxHash = accountSetResult.result.hash
-      setResult((prev) => ({ ...prev, accountSetTxHash }))
+      const prepared = await client.autofill(mptIssuanceCreate)
+      const signed = wallet.sign(prepared)
+      const submitResponse = await client.submitAndWait(signed.tx_blob)
 
-      // Step 4: Create a distribution wallet and fund it
-      setStatus('creating-distribution')
-      
-      const fundResult = await client.fundWallet()
-      const distributionWallet = fundResult.wallet
-      setResult((prev) => ({ ...prev, distributionWallet: distributionWallet.address }))
-      
-      console.log(`[Distribution] Created wallet: ${distributionWallet.address}`)
+      console.log('[MPT] Submit response:', JSON.stringify(submitResponse.result, null, 2))
 
-      // Step 5: Set up trust line from distribution wallet to issuer
-      setStatus('setting-trustline')
-      
-      const formattedCurrency = formatCurrencyCode(tokenTicker)
-      
-      const trustSetTx = {
-        TransactionType: 'TrustSet' as const,
-        Account: distributionWallet.address,
-        LimitAmount: {
-          currency: formattedCurrency,
-          issuer: address, // Trust the issuer (connected wallet)
-          value: '1000000000', // High limit for the trust line
-        },
+      // Check if transaction succeeded
+      const txResult = (submitResponse.result.meta as { TransactionResult?: string })?.TransactionResult
+      if (txResult !== 'tesSUCCESS') {
+        throw new Error(`Transaction failed with result: ${txResult}`)
       }
 
-      // Sign with distribution wallet and submit
-      const preparedTrustSet = await client.autofill(trustSetTx)
-      const signedTrustSet = distributionWallet.sign(preparedTrustSet)
-      const trustSetResult = await client.submitAndWait(signedTrustSet.tx_blob)
-      
-      const trustSetTxHash = trustSetResult.result.hash
-      setResult((prev) => ({ ...prev, trustSetTxHash }))
-      
-      console.log(`[TrustSet] TX Hash: ${trustSetTxHash}`)
+      // Get the MPT issuance ID from the response
+      const mptIssuanceId = (submitResponse.result.meta as { mpt_issuance_id?: string })?.mpt_issuance_id
+      const txHash = submitResponse.result.hash
 
-      // Step 6: Create Payment transaction to "mint" tokens
-      setStatus('minting')
+      setResult((prev) => ({
+        ...prev,
+        mptIssuanceId,
+        txHash
+      }))
 
-      const paymentTx = {
-        TransactionType: 'Payment' as const,
-        Account: address,
-        Destination: distributionWallet.address,
-        Amount: {
-          currency: formattedCurrency,
-          value: amount,
-          issuer: address, // The issuer is the connected wallet
-        },
-      }
-
-      // Autofill, sign with issuer wallet, and submit
-      const preparedPayment = await client.autofill(paymentTx)
-      const signedPayment = wallet.sign(preparedPayment)
-      const paymentResult = await client.submitAndWait(signedPayment.tx_blob)
-
-      const paymentTxHash = paymentResult.result.hash
-      setResult((prev) => ({ ...prev, paymentTxHash }))
+      console.log(`[MPT] Created successfully with issuance ID: ${mptIssuanceId}`)
 
       setStatus('success')
     } catch (error) {
@@ -229,7 +255,7 @@ export default function IssuerPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-carbon-800">🌿 CarbonLedger</h1>
-            <p className="text-carbon-600">Issuer Portal - RWA Token Minting</p>
+            <p className="text-carbon-600">Issuer Portal - MPT Token Issuance</p>
           </div>
           <WalletConnectButton />
         </div>
@@ -237,7 +263,7 @@ export default function IssuerPage() {
         {/* Main Card */}
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <h2 className="text-xl font-semibold text-gray-800 mb-6">
-            Issue Carbon Credits
+            Issue Carbon Credits (MPT)
           </h2>
 
           {/* Form */}
@@ -265,20 +291,21 @@ export default function IssuerPage() {
               <input
                 type="text"
                 value={tokenTicker}
-                onChange={(e) => setTokenTicker(e.target.value.toUpperCase())}
-                placeholder="e.g., CO2-AMZ"
+                onChange={(e) => setTokenTicker(e.target.value.toUpperCase().slice(0, 6))}
+                placeholder="e.g., CO2AMZ"
+                maxLength={6}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-carbon-500 focus:border-transparent transition-all"
                 disabled={status !== 'idle'}
               />
               <p className="mt-1 text-xs text-gray-500">
-                Use 3 characters for standard codes, or longer for custom tokens
+                Max 6 characters, uppercase letters and digits only (e.g., CO2AMZ)
               </p>
             </div>
 
             {/* Amount */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Amount (Tons of CO₂)
+                Maximum Supply (Tons of CO₂)
               </label>
               <input
                 type="number"
@@ -360,9 +387,9 @@ export default function IssuerPage() {
               }`}
             >
               {!isConnected ? (
-                'Connect Wallet to Mint'
+                'Connect Wallet to Issue'
               ) : status === 'idle' || status === 'success' || status === 'error' ? (
-                '🌱 Mint Carbon Tokens'
+                '🌱 Issue Carbon Token (MPT)'
               ) : (
                 <span className="flex items-center justify-center gap-2">
                   <svg
@@ -386,10 +413,7 @@ export default function IssuerPage() {
                     />
                   </svg>
                   {status === 'uploading' && 'Uploading to IPFS...'}
-                  {status === 'setting-domain' && 'Setting Domain...'}
-                  {status === 'creating-distribution' && 'Creating Distribution Wallet...'}
-                  {status === 'setting-trustline' && 'Setting Trust Line...'}
-                  {status === 'minting' && 'Minting Tokens...'}
+                  {status === 'creating-mpt' && 'Creating MPT Issuance...'}
                 </span>
               )}
             </button>
@@ -412,7 +436,7 @@ export default function IssuerPage() {
                     d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                Tokens Minted Successfully!
+                MPT Issued Successfully!
               </div>
 
               <div className="space-y-3 text-sm">
@@ -424,49 +448,26 @@ export default function IssuerPage() {
                     </code>
                   </div>
                 )}
-                
-                {result.accountSetTxHash && (
+
+                {result.mptIssuanceId && (
                   <div>
-                    <span className="text-gray-600">AccountSet TX:</span>
+                    <span className="text-gray-600">MPT Issuance ID:</span>
                     <a
-                      href={`${DEVNET_EXPLORER_URL}/${result.accountSetTxHash}`}
+                      href={`${DEVNET_EXPLORER_URL}/mpt/${result.mptIssuanceId}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="ml-2 text-carbon-600 hover:text-carbon-800 underline"
                     >
-                      View on Explorer ↗
-                    </a>
-                  </div>
-                )}
-
-                {result.distributionWallet && (
-                  <div>
-                    <span className="text-gray-600">Distribution Wallet:</span>
-                    <code className="ml-2 px-2 py-1 bg-white rounded text-xs">
-                      {result.distributionWallet}
-                    </code>
-                  </div>
-                )}
-
-                {result.trustSetTxHash && (
-                  <div>
-                    <span className="text-gray-600">TrustSet TX:</span>
-                    <a
-                      href={`${DEVNET_EXPLORER_URL}/${result.trustSetTxHash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="ml-2 text-carbon-600 hover:text-carbon-800 underline"
-                    >
-                      View on Explorer ↗
+                      {result.mptIssuanceId.slice(0, 16)}... ↗
                     </a>
                   </div>
                 )}
                 
-                {result.paymentTxHash && (
+                {result.txHash && (
                   <div>
-                    <span className="text-gray-600">Payment TX:</span>
+                    <span className="text-gray-600">Transaction:</span>
                     <a
-                      href={`${DEVNET_EXPLORER_URL}/${result.paymentTxHash}`}
+                      href={`${DEVNET_EXPLORER_URL}/transactions/${result.txHash}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="ml-2 text-carbon-600 hover:text-carbon-800 underline"
@@ -481,7 +482,7 @@ export default function IssuerPage() {
                 onClick={resetForm}
                 className="mt-4 px-4 py-2 text-sm text-carbon-600 hover:text-carbon-800 font-medium"
               >
-                ← Mint Another Token
+                ← Issue Another Token
               </button>
             </div>
           )}
@@ -503,7 +504,7 @@ export default function IssuerPage() {
                     d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                Minting Failed
+                Issuance Failed
               </div>
               <p className="text-red-600 text-sm">{result.error}</p>
               <button
@@ -517,15 +518,17 @@ export default function IssuerPage() {
 
           {/* Info Box */}
           <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-100">
-            <h3 className="font-medium text-blue-800 mb-2">ℹ️ How it works</h3>
+            <h3 className="font-medium text-blue-800 mb-2">ℹ️ How MPT Issuance Works</h3>
             <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
               <li>Upload your audit report (stored on IPFS)</li>
-              <li>IPFS hash is linked to your wallet via AccountSet</li>
-              <li>A distribution wallet is created and funded</li>
-              <li>Trust line is set up from distribution wallet to issuer</li>
-              <li>Tokens are minted and sent to the distribution wallet</li>
-              <li>Tokens can then be listed on the marketplace</li>
+              <li>Metadata is encoded following XLS-89 standard</li>
+              <li>MPTokenIssuanceCreate transaction is submitted</li>
+              <li>Token is created with transferable & tradeable flags</li>
+              <li>Holders can authorize and receive tokens via MPTokenAuthorize</li>
             </ol>
+            <p className="text-xs text-blue-600 mt-2">
+              Note: MPT requires 0.2 XRP owner reserve per issuance
+            </p>
           </div>
         </div>
 
