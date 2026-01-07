@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useWallet } from '@/components/XRPLProvider';
+import { useWallet } from '@/components/buyer/BuyerXRPLProvider'
 import Link from 'next/link';
 import { ShoppingCart, Factory, Leaf, CheckCircle, Lock, TrendingUp } from 'lucide-react';
 

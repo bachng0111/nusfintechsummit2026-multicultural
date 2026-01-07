@@ -3,33 +3,34 @@
 import React, { useState, useEffect } from 'react';
 import TokenCard from '../../components/marketplace/TokenCard';
 import { Token } from '../../components/marketplace/TokenCard';
-import { useWallet } from '../../components/XRPLProvider';
+import { useWallet } from '@/components/buyer/BuyerXRPLProvider';
 import { useRouter } from 'next/navigation';
+import { Payment } from 'xrpl';
 
 export default function MarketplacePage() {
-  const { isConnected } = useWallet();
-  const [tokens, setTokens] = useState<Token[]>([]);
   const router = useRouter();
+  const { isConnected, address, getWallet, getClient } = useWallet();
+
+  const [tokens, setTokens] = useState<Token[]>([]);
+  const [selectedToken, setSelectedToken] = useState<Token | null>(null);
+  const [buying, setBuying] = useState(false);
 
   const handleTokenPurchase = (token: Token) => {
     if (!isConnected) {
-      // store intent
       localStorage.setItem(
         'post_login_intent',
         JSON.stringify({
           action: 'BUY_TOKEN',
           tokenId: token.id,
         })
-      )
-
-      // redirect to wallet creation (home)
-      router.push('/')
-      return
+      );
+      router.push('/');
+      return;
     }
 
-    // logged in → proceed to buy flow
-    router.push(`/marketplace/buy/${token.id}`)
-  }
+    // Open modal
+    setSelectedToken(token);
+  };
 
   useEffect(() => {
     setTokens([
@@ -66,6 +67,46 @@ export default function MarketplacePage() {
     ]);
   }, []);
 
+  
+  const handleConfirmPurchase = async (token: Token) => {
+    if (!address) {
+      alert('Wallet not connected!');
+      return;
+    }
+
+    setBuying(true);
+
+    try {
+      const client = await getClient();
+      if (!client) throw new Error('XRPL client not available');
+
+      const wallet = getWallet();
+      if (!wallet) throw new Error('Wallet not available');
+
+      const issuerAddress = 'rJP2saa6mD796QqKyBUSkxhgkDySkJgnxf'; // Replace with actual issuer address
+      // const rlusdIssuer = 'rEXAMPLERLUSDISSUER'; for future rlusd integration
+
+      const payment: Payment = {
+        TransactionType: 'Payment',
+        Account: address,
+        Destination: issuerAddress,
+        Amount: (parseFloat(token.price) * 1_000_000).toString(), // XRP in drops
+      };
+
+      // Sign & submit
+      const result = await client.submitAndWait(payment, { wallet });
+
+      console.log('Purchase successful:', result);
+      alert(`Successfully purchased ${token.name}!`);
+      setSelectedToken(null);
+    } catch (err) {
+      console.error('Purchase failed:', err);
+      alert('Purchase failed. Check console for details.');
+    } finally {
+      setBuying(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-green-50">
       {/* Header */}
@@ -76,6 +117,31 @@ export default function MarketplacePage() {
       </div>
 
       {/* Main Content */}
+      {selectedToken && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-lg">
+            <h3 className="text-xl font-bold mb-4">{selectedToken.name}</h3>
+            <p className="text-gray-600 mb-2">Price: {selectedToken.price} RLUSD</p>
+            <p className="text-gray-500 mb-4">{selectedToken.description}</p>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setSelectedToken(null)}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleConfirmPurchase(selectedToken)}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                Confirm Purchase
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 py-8">
         <h2 className="text-2xl font-bold text-gray-900 mb-6">Available Carbon Credits</h2>
 

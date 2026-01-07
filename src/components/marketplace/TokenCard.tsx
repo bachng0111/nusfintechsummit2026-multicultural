@@ -1,4 +1,3 @@
-// src/components/TokenCard.tsx
 'use client';
 
 import React from 'react';
@@ -7,7 +6,7 @@ export interface Token {
   id: string;
   name: string;
   description?: string;
-  price?: string;
+  price: string;
   vintage?: string;
   project?: string;
   certification?: string;

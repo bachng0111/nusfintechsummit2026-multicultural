@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useWallet } from '@/components/XRPLProvider';
+import { useWallet } from '@/components/buyer/BuyerXRPLProvider';
 import { AlertCircle, Loader2, RefreshCw, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 

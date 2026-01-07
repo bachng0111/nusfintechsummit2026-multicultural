@@ -1,7 +1,7 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
-import * as xrpl from 'xrpl'
+import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import * as xrpl from 'xrpl';
 
 const XRPL_DEVNET = 'wss://s.devnet.rippletest.net:51233'
 
@@ -16,7 +16,7 @@ interface WalletContextType {
   disconnect: () => void
   getClient: () => Promise<xrpl.Client>
   getWallet: () => xrpl.Wallet | null
-}
+};
 
 const WalletContext = createContext<WalletContextType>({
   address: null,
@@ -29,96 +29,135 @@ const WalletContext = createContext<WalletContextType>({
   disconnect: () => {},
   getClient: async () => new xrpl.Client(XRPL_DEVNET),
   getWallet: () => null,
-})
+});
 
 export function useWallet() {
-  return useContext(WalletContext)
+  return useContext(WalletContext);
 }
 
 export function XRPLProvider({ children }: { children: ReactNode }) {
-  const [address, setAddress] = useState<string | null>(null)
-  const [seed, setSeed] = useState<string | null>(null)
-  const [balance, setBalance] = useState<string | null>(null)
-  const [isConnecting, setIsConnecting] = useState(false)
-  const [wallet, setWallet] = useState<xrpl.Wallet | null>(null)
+  const [address, setAddress] = useState<string | null>(null);
+  const [seed, setSeed] = useState<string | null>(null);
+  const [balance, setBalance] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [wallet, setWallet] = useState<xrpl.Wallet | null>(null);
+
+  // account persistence using LocalStorage
+  useEffect(() => {
+    const restoreWallet = async () => {
+      const savedSeed = localStorage.getItem('xrpl_wallet_seed');
+      if (savedSeed) {
+        try {
+          const restoredWallet = xrpl.Wallet.fromSeed(savedSeed);
+          setWallet(restoredWallet);
+          setAddress(restoredWallet.classicAddress);
+          setSeed(savedSeed);
+
+          const client = new xrpl.Client(XRPL_DEVNET);
+          await client.connect();
+          try {
+            const xrpBalance = await client.getXrpBalance(restoredWallet.address)
+            setBalance(String(xrpBalance));
+          } catch {
+            setBalance('0');
+          }
+          await client.disconnect();
+
+        } catch (err) {
+          console.error('Failed to restore wallet from seed:', err);
+          localStorage.removeItem('xrpl_wallet_seed'); // clean invalid seed
+        }
+      }
+    }
+
+    restoreWallet();
+  }, [])
 
   // Get a new funded wallet from the faucet (for Devnet/Testnet)
   const connectNewWallet = useCallback(async () => {
-    setIsConnecting(true)
+    setIsConnecting(true);
     try {
-      const client = new xrpl.Client(XRPL_DEVNET)
-      await client.connect()
+      const client = new xrpl.Client(XRPL_DEVNET);
+      await client.connect();
 
       // Fund a new wallet using the faucet
-      const fundResult = await client.fundWallet()
-      const newWallet = fundResult.wallet
+      const fundResult = await client.fundWallet();
+      const newWallet = fundResult.wallet;
 
-      setWallet(newWallet)
-      setAddress(newWallet.address)
-      setSeed(newWallet.seed || null)
+      setWallet(newWallet);
+      setAddress(newWallet.address);
+      setSeed(newWallet.seed || null);
+
+      if (newWallet.seed) {
+        localStorage.setItem('xrpl_wallet_seed', newWallet.seed);
+      }
 
       // Get balance
-      const xrpBalance = await client.getXrpBalance(newWallet.address)
-      setBalance(String(xrpBalance))
+      const xrpBalance = await client.getXrpBalance(newWallet.address);
+      setBalance(String(xrpBalance));
 
-      await client.disconnect()
+      await client.disconnect();
     } catch (error) {
-      console.error('Failed to create wallet:', error)
-      throw error
+      console.error('Failed to create wallet:', error);
+      throw error;
     } finally {
-      setIsConnecting(false)
+      setIsConnecting(false);
     }
-  }, [])
+  }, []);
 
   // Connect using an existing seed
   const connectFromSeed = useCallback(async (existingSeed: string) => {
     setIsConnecting(true)
     try {
-      const client = new xrpl.Client(XRPL_DEVNET)
-      await client.connect()
+      const client = new xrpl.Client(XRPL_DEVNET);
+      await client.connect();
 
       // Derive wallet from seed
-      const existingWallet = xrpl.Wallet.fromSeed(existingSeed)
+      const existingWallet = xrpl.Wallet.fromSeed(existingSeed);
 
-      setWallet(existingWallet)
-      setAddress(existingWallet.address)
-      setSeed(existingSeed)
+      setWallet(existingWallet);
+      setAddress(existingWallet.address);
+      setSeed(existingSeed);
+
+      localStorage.setItem('xrpl_wallet_seed', existingSeed);
 
       // Get balance
       try {
-        const xrpBalance = await client.getXrpBalance(existingWallet.address)
-        setBalance(String(xrpBalance))
+        const xrpBalance = await client.getXrpBalance(existingWallet.address);
+        setBalance(String(xrpBalance));
       } catch {
-        setBalance('0')
+        setBalance('0');
       }
 
-      await client.disconnect()
+      await client.disconnect();
     } catch (error) {
-      console.error('Failed to connect from seed:', error)
-      throw error
+      console.error('Failed to connect from seed:', error);
+      throw error;
     } finally {
-      setIsConnecting(false)
+      setIsConnecting(false);
     }
-  }, [])
+  }, []);
 
   const disconnect = useCallback(() => {
-    setAddress(null)
-    setSeed(null)
-    setBalance(null)
-    setWallet(null)
-  }, [])
+    setAddress(null);
+    setSeed(null);
+    setBalance(null);
+    setWallet(null);
+
+    localStorage.removeItem('xrpl_wallet_seed');
+  }, []);
 
   // Get a connected client
   const getClient = useCallback(async () => {
-    const client = new xrpl.Client(XRPL_DEVNET)
-    await client.connect()
-    return client
-  }, [])
+    const client = new xrpl.Client(XRPL_DEVNET);
+    await client.connect();
+    return client;
+  }, []);
 
   // Get the current wallet instance
   const getWallet = useCallback(() => {
-    return wallet
-  }, [wallet])
+    return wallet;
+  }, [wallet]);
 
   return (
     <WalletContext.Provider
@@ -137,16 +176,16 @@ export function XRPLProvider({ children }: { children: ReactNode }) {
     >
       {children}
     </WalletContext.Provider>
-  )
+  );
 }
 
 // Wallet Connect Button Component
 export function WalletConnectButton() {
-  const { address, balance, isConnected, isConnecting, connectNewWallet, disconnect } = useWallet()
-  const [showSeedInput, setShowSeedInput] = useState(false)
+  const { address, balance, isConnected, isConnecting, connectNewWallet, disconnect } = useWallet();
+  const [showSeedInput, setShowSeedInput] = useState(false);
 
   const formatAddress = (addr: string) => {
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   }
 
   if (isConnected && address) {
@@ -188,5 +227,5 @@ export function WalletConnectButton() {
         '🔗 Get Test Wallet (Devnet)'
       )}
     </button>
-  )
+  );
 }

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useWallet } from '@/components/XRPLProvider';
+import { useWallet } from '@/components/buyer/BuyerXRPLProvider';
 import { Leaf, Home, ShoppingCart, User, LogOut, Wallet } from 'lucide-react';
 
 export default function Navbar() {
