@@ -8,14 +8,13 @@ export default function MarketplacePage() {
   const { isConnected } = useWallet();
   const [tokens, setTokens] = useState<any[]>([]);
 
-  // Mock marketplace tokens
   useEffect(() => {
     setTokens([
       {
         id: 'CC001',
         name: 'Reforestation Carbon Credit',
         price: '50',
-        amount: '1',
+        amount: 1,
         description: 'Verified carbon offset from reforestation project',
         project: 'Amazon Rainforest Initiative',
         vintage: '2024',
@@ -25,7 +24,7 @@ export default function MarketplacePage() {
         id: 'CC002',
         name: 'Renewable Energy Credit',
         price: '75',
-        amount: '1',
+        amount: 1,
         description: 'Solar energy carbon offset credit',
         project: 'Solar Farm TX-012',
         vintage: '2024',
@@ -35,7 +34,7 @@ export default function MarketplacePage() {
         id: 'CC003',
         name: 'Wind Power Credit',
         price: '65',
-        amount: '1',
+        amount: 1,
         description: 'Wind energy carbon offset credit',
         project: 'Offshore Wind Project',
         vintage: '2025',
@@ -62,7 +61,18 @@ export default function MarketplacePage() {
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {tokens.map((token) => (
-              <TokenCard key={token.id} token={token} />
+              <TokenCard
+                key={token.id}
+                token={token}
+                onBuy={(token) => {
+                  if (!isConnected) {
+                    alert('Please connect your wallet first!');
+                    return;
+                  }
+                  console.log('Buying token:', token);
+                  // Next step: call XRPL transaction here
+                }}
+              />
             ))}
           </div>
         )}
