@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useWallet } from '@/components/XRPLProvider';
+import { WalletConnectButton, useWallet } from '@/components/XRPLProvider';
 import * as xrpl from 'xrpl';
 import Link from 'next/link';
 
@@ -17,23 +17,6 @@ export default function HomePage() {
       router.push('/buyer/account');
     }
   }, [isConnected, router]);
-
-  const handleCreateWallet = async () => {
-    try {
-      // Generate locally to show seed in console
-      const testWallet = xrpl.Wallet.generate();
-      console.log('💡 Devnet Wallet Seed (keep private!):', testWallet.seed);
-      console.log('Classic Address:', testWallet.classicAddress);
-
-      // Use your XRPLProvider method to actually create/connect wallet
-      await connectNewWallet();
-
-      // After connection, redirect
-      router.push('/buyer/account');
-    } catch (err) {
-      console.error('Failed to create wallet:', err);
-    }
-  };
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-start p-8 bg-gradient-to-br from-green-50 to-blue-50 space-y-12">
@@ -71,13 +54,9 @@ export default function HomePage() {
         <h2 className="text-2xl font-bold text-center">Connect Wallet (Devnet)</h2>
 
         {/* Create Wallet */}
-        <button
-          onClick={handleCreateWallet}
-          disabled={isConnecting}
-          className="w-full py-3 bg-blue-600 text-white rounded-lg"
-        >
-          {isConnecting ? 'Creating Wallet...' : 'Create Test Wallet'}
-        </button>
+        <div className="flex justify-center">
+          <WalletConnectButton />
+        </div>
         <p className="text-xs text-gray-500 text-center">
           Devnet only. Do NOT use real wallets.
         </p>
