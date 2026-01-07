@@ -361,7 +361,7 @@ export default function IssuerPage() {
             >
               {!isConnected ? (
                 'Connect Wallet to Mint'
-              ) : status === 'idle' ? (
+              ) : status === 'idle' || status === 'success' || status === 'error' ? (
                 '🌱 Mint Carbon Tokens'
               ) : (
                 <span className="flex items-center justify-center gap-2">
