@@ -2,12 +2,10 @@
 
 import { useState, useCallback } from 'react'
 import { WalletConnectButton, useWallet } from '@/components/XRPLProvider'
+import * as xrpl from 'xrpl'
 
 // XRPL Devnet configuration
 const DEVNET_EXPLORER_URL = 'https://devnet.xrpl.org/transactions'
-
-// Standby/Distribution wallet address (Devnet)
-const STANDBY_WALLET_ADDRESS = 'rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe'
 
 /**
  * Mock IPFS Upload Function
@@ -53,12 +51,14 @@ function formatCurrencyCode(ticker: string): string {
   return hex.toUpperCase().padEnd(40, '0')
 }
 
-type MintStatus = 'idle' | 'uploading' | 'setting-domain' | 'minting' | 'success' | 'error'
+type MintStatus = 'idle' | 'uploading' | 'setting-domain' | 'creating-distribution' | 'setting-trustline' | 'minting' | 'success' | 'error'
 
 interface MintResult {
   accountSetTxHash?: string
+  trustSetTxHash?: string
   paymentTxHash?: string
   ipfsHash?: string
+  distributionWallet?: string
   error?: string
 }
 
@@ -111,7 +111,7 @@ export default function IssuerPage() {
     setStatus('uploading')
     setResult({})
 
-    let client = null
+    let client: xrpl.Client | null = null
 
     try {
       // Step 1: Upload to IPFS (mocked)
@@ -142,15 +142,47 @@ export default function IssuerPage() {
       const accountSetTxHash = accountSetResult.result.hash
       setResult((prev) => ({ ...prev, accountSetTxHash }))
 
-      // Step 4: Create Payment transaction to "mint" tokens
-      setStatus('minting')
+      // Step 4: Create a distribution wallet and fund it
+      setStatus('creating-distribution')
+      
+      const fundResult = await client.fundWallet()
+      const distributionWallet = fundResult.wallet
+      setResult((prev) => ({ ...prev, distributionWallet: distributionWallet.address }))
+      
+      console.log(`[Distribution] Created wallet: ${distributionWallet.address}`)
 
+      // Step 5: Set up trust line from distribution wallet to issuer
+      setStatus('setting-trustline')
+      
       const formattedCurrency = formatCurrencyCode(tokenTicker)
+      
+      const trustSetTx = {
+        TransactionType: 'TrustSet' as const,
+        Account: distributionWallet.address,
+        LimitAmount: {
+          currency: formattedCurrency,
+          issuer: address, // Trust the issuer (connected wallet)
+          value: '1000000000', // High limit for the trust line
+        },
+      }
+
+      // Sign with distribution wallet and submit
+      const preparedTrustSet = await client.autofill(trustSetTx)
+      const signedTrustSet = distributionWallet.sign(preparedTrustSet)
+      const trustSetResult = await client.submitAndWait(signedTrustSet.tx_blob)
+      
+      const trustSetTxHash = trustSetResult.result.hash
+      setResult((prev) => ({ ...prev, trustSetTxHash }))
+      
+      console.log(`[TrustSet] TX Hash: ${trustSetTxHash}`)
+
+      // Step 6: Create Payment transaction to "mint" tokens
+      setStatus('minting')
 
       const paymentTx = {
         TransactionType: 'Payment' as const,
         Account: address,
-        Destination: STANDBY_WALLET_ADDRESS,
+        Destination: distributionWallet.address,
         Amount: {
           currency: formattedCurrency,
           value: amount,
@@ -158,7 +190,7 @@ export default function IssuerPage() {
         },
       }
 
-      // Autofill, sign, and submit
+      // Autofill, sign with issuer wallet, and submit
       const preparedPayment = await client.autofill(paymentTx)
       const signedPayment = wallet.sign(preparedPayment)
       const paymentResult = await client.submitAndWait(signedPayment.tx_blob)
@@ -355,6 +387,8 @@ export default function IssuerPage() {
                   </svg>
                   {status === 'uploading' && 'Uploading to IPFS...'}
                   {status === 'setting-domain' && 'Setting Domain...'}
+                  {status === 'creating-distribution' && 'Creating Distribution Wallet...'}
+                  {status === 'setting-trustline' && 'Setting Trust Line...'}
                   {status === 'minting' && 'Minting Tokens...'}
                 </span>
               )}
@@ -396,6 +430,29 @@ export default function IssuerPage() {
                     <span className="text-gray-600">AccountSet TX:</span>
                     <a
                       href={`${DEVNET_EXPLORER_URL}/${result.accountSetTxHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-2 text-carbon-600 hover:text-carbon-800 underline"
+                    >
+                      View on Explorer ↗
+                    </a>
+                  </div>
+                )}
+
+                {result.distributionWallet && (
+                  <div>
+                    <span className="text-gray-600">Distribution Wallet:</span>
+                    <code className="ml-2 px-2 py-1 bg-white rounded text-xs">
+                      {result.distributionWallet}
+                    </code>
+                  </div>
+                )}
+
+                {result.trustSetTxHash && (
+                  <div>
+                    <span className="text-gray-600">TrustSet TX:</span>
+                    <a
+                      href={`${DEVNET_EXPLORER_URL}/${result.trustSetTxHash}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="ml-2 text-carbon-600 hover:text-carbon-800 underline"
@@ -464,6 +521,8 @@ export default function IssuerPage() {
             <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
               <li>Upload your audit report (stored on IPFS)</li>
               <li>IPFS hash is linked to your wallet via AccountSet</li>
+              <li>A distribution wallet is created and funded</li>
+              <li>Trust line is set up from distribution wallet to issuer</li>
               <li>Tokens are minted and sent to the distribution wallet</li>
               <li>Tokens can then be listed on the marketplace</li>
             </ol>
