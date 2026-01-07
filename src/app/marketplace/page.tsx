@@ -2,11 +2,34 @@
 
 import React, { useState, useEffect } from 'react';
 import TokenCard from '../../components/marketplace/TokenCard';
+import { Token } from '../../components/marketplace/TokenCard';
 import { useWallet } from '../../components/XRPLProvider';
+import { useRouter } from 'next/navigation';
 
 export default function MarketplacePage() {
   const { isConnected } = useWallet();
-  const [tokens, setTokens] = useState<any[]>([]);
+  const [tokens, setTokens] = useState<Token[]>([]);
+  const router = useRouter();
+
+  const handleTokenPurchase = (token: Token) => {
+    if (!isConnected) {
+      // store intent
+      localStorage.setItem(
+        'post_login_intent',
+        JSON.stringify({
+          action: 'BUY_TOKEN',
+          tokenId: token.id,
+        })
+      )
+
+      // redirect to wallet creation (home)
+      router.push('/')
+      return
+    }
+
+    // logged in → proceed to buy flow
+    router.push(`/marketplace/buy/${token.id}`)
+  }
 
   useEffect(() => {
     setTokens([
@@ -64,14 +87,7 @@ export default function MarketplacePage() {
               <TokenCard
                 key={token.id}
                 token={token}
-                onBuy={(token) => {
-                  if (!isConnected) {
-                    alert('Please connect your wallet first!');
-                    return;
-                  }
-                  console.log('Buying token:', token);
-                  // Next step: call XRPL transaction here
-                }}
+                onBuy={handleTokenPurchase}
               />
             ))}
           </div>

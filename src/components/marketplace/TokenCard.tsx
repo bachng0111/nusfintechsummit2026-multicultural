@@ -3,7 +3,7 @@
 
 import React from 'react';
 
-interface Token {
+export interface Token {
   id: string;
   name: string;
   description?: string;
