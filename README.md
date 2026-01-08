@@ -41,58 +41,6 @@ npm run dev
 
 The application will be available at `http://localhost:3000`
 
-### User Workflows
-
-#### 1. As an Issuer (Carbon Credit Creator)
-
-1. Navigate to the **Issuer Portal** (`/issuer`)
-2. Click **"Get Test Wallet (Devnet)"** to create a funded XRPL wallet
-3. Fill in the carbon credit details:
-   - Project Name (e.g., "Amazon Rainforest Conservation")
-   - Token Ticker (e.g., "AMZN")
-   - Amount of credits to mint
-   - Price per credit (in XRP)
-   - Upload verification PDF (optional)
-4. Click **"Mint Carbon Credit Token"**
-5. Wait for the transaction to complete on XRPL Devnet
-6. Your token will appear in the **Marketplace**
-
-#### 2. As a Buyer (Carbon Credit Purchaser)
-
-1. Navigate to the **Marketplace** (`/marketplace`)
-2. Click **"Get Test Wallet (Devnet)"** to create a funded XRPL wallet
-3. Browse available carbon credits
-4. Click **"Buy Now"** on a token you want to purchase
-5. Confirm the purchase request
-6. Wait for the issuer to approve the transaction
-7. Once approved, the escrow payment is processed automatically
-8. View your purchased tokens in **My Account** (`/buyer/account`)
-
-#### 3. Retiring Carbon Credits
-
-1. Go to **My Account** (`/buyer/account`)
-2. Find the token you want to retire
-3. Click **"Retire Token"**
-4. Confirm the retirement (this action is permanent)
-5. The token is sent back to the issuer and marked as **RETIRED**
-6. A retirement certificate is generated for your records
-
-#### 4. Viewing the Dashboard
-
-1. Navigate to the **Dashboard** (`/dashboard`)
-2. View the lifecycle of all carbon credits:
-   - Total tokens issued
-   - Active tokens in circulation
-   - Retired tokens
-3. Use filters to search by project, certification, or vintage year
-4. Click on any token to see its full transaction history
-
-### Test Wallet Information
-
-- All wallets are created on **XRPL Devnet** (test network)
-- Each new wallet is automatically funded with **100 XRP** for testing
-- No real money is used – perfect for testing the full workflow
-
 ---
 
 ## Overview
@@ -328,6 +276,59 @@ The demo video includes:
 - Carbon credit retirement
 - Dashboard walkthrough
 
+---
+
+### User Workflows
+
+#### 1. As an Issuer (Carbon Credit Creator)
+
+1. Navigate to the **Issuer Portal** (`/issuer`)
+2. Click **"Get Test Wallet (Devnet)"** to create a funded XRPL wallet
+3. Fill in the carbon credit details:
+   - Project Name (e.g., "Amazon Rainforest Conservation")
+   - Token Ticker (e.g., "AMZN")
+   - Amount of credits to mint
+   - Price per credit (in XRP)
+   - Upload verification PDF (optional)
+4. Click **"Mint Carbon Credit Token"**
+5. Wait for the transaction to complete on XRPL Devnet
+6. Your token will appear in the **Marketplace**
+
+#### 2. As a Buyer (Carbon Credit Purchaser)
+
+1. Navigate to the **Marketplace** (`/marketplace`)
+2. Click **"Get Test Wallet (Devnet)"** to create a funded XRPL wallet
+3. Browse available carbon credits
+4. Click **"Buy Now"** on a token you want to purchase
+5. Confirm the purchase request
+6. Wait for the issuer to approve the transaction
+7. Once approved, the escrow payment is processed automatically
+8. View your purchased tokens in **My Account** (`/buyer/account`)
+
+#### 3. Retiring Carbon Credits
+
+1. Go to **My Account** (`/buyer/account`)
+2. Find the token you want to retire
+3. Click **"Retire Token"**
+4. Confirm the retirement (this action is permanent)
+5. The token is sent back to the issuer and marked as **RETIRED**
+6. A retirement certificate is generated for your records
+
+#### 4. Viewing the Dashboard
+
+1. Navigate to the **Dashboard** (`/dashboard`)
+2. View the lifecycle of all carbon credits:
+   - Total tokens issued
+   - Active tokens in circulation
+   - Retired tokens
+3. Use filters to search by project, certification, or vintage year
+4. Click on any token to see its full transaction history
+
+### Test Wallet Information
+
+- All wallets are created on **XRPL Devnet** (test network)
+- Each new wallet is automatically funded with **100 XRP** for testing
+- No real money is used – perfect for testing the full workflow
 ---
 
 ## Repository Structure
