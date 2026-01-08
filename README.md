@@ -335,10 +335,32 @@ The demo video includes:
 
 ```text
 .
-├── frontend/
-├── backend/
-├── dashboard/
-├── scripts/
+├── src/
+│   ├── app/                    # Next.js App Router pages
+│   │   ├── page.tsx            # Home page
+│   │   ├── layout.tsx          # Root layout with providers
+│   │   ├── globals.css         # Global styles
+│   │   ├── issuer/             # Issuer Portal (mint tokens)
+│   │   ├── marketplace/        # Carbon credit marketplace
+│   │   ├── buyer/
+│   │   │   └── account/        # Buyer account management
+│   │   └── dashboard/          # Lifecycle dashboard
+│   ├── components/             # React components
+│   │   ├── Navbar.tsx          # Navigation bar
+│   │   ├── XRPLProvider.tsx    # XRPL wallet context
+│   │   ├── buyer/              # Buyer-specific components
+│   │   ├── dashboard/          # Dashboard components
+│   │   └── marketplace/        # Marketplace components
+│   ├── lib/                    # Utilities and helpers
+│   │   ├── escrow.ts           # XRPL escrow functions
+│   │   └── dashboard/          # Dashboard data utilities
+│   ├── data/                   # Static data files
+│   └── services/               # API services
+├── escrow_documentations/      # XRPL escrow documentation
+├── package.json                # Dependencies and scripts
+├── next.config.js              # Next.js configuration
+├── tailwind.config.js          # Tailwind CSS configuration
+├── tsconfig.json               # TypeScript configuration
 └── README.md
 ```
 
