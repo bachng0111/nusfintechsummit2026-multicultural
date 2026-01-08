@@ -5,7 +5,7 @@ import TokenCard from '../../components/marketplace/TokenCard';
 import { Token } from '../../components/marketplace/TokenCard';
 import { useWallet } from '@/components/buyer/BuyerXRPLProvider';
 import { useRouter } from 'next/navigation';
-import { Payment } from 'xrpl';
+import BuyMPTButton from '../../components/marketplace/BuyButton'; // new button
 
 export default function MarketplacePage() {
   const router = useRouter();
@@ -15,7 +15,18 @@ export default function MarketplacePage() {
   const [selectedToken, setSelectedToken] = useState<Token | null>(null);
   const [buying, setBuying] = useState(false);
 
-  const handleTokenPurchase = (token: Token) => {
+  // Load XRPL client & wallet for the modal
+  const [client, setClient] = useState<any>(null);
+  const [wallet, setWallet] = useState<any>(null);
+
+  // For demo, map token ID → mptIssuanceId
+  const tokenMPTMap: Record<string, string> = {
+    CC001: 'insert issuance id',
+    CC002: '0028D357C396CB5E1AF33362CD014A48A74F1F5E183FF728',
+    CC003: 'insert issuance id',
+  };
+
+  const handleTokenPurchase = async (token: Token) => {
     if (!isConnected) {
       localStorage.setItem(
         'post_login_intent',
@@ -28,8 +39,17 @@ export default function MarketplacePage() {
       return;
     }
 
-    // Open modal
     setSelectedToken(token);
+
+    // Load XRPL client & wallet
+    try {
+      const xrplClient = await getClient();
+      const xrplWallet = getWallet();
+      setClient(xrplClient);
+      setWallet(xrplWallet);
+    } catch (err) {
+      console.error('Failed to load XRPL client/wallet:', err);
+    }
   };
 
   useEffect(() => {
@@ -67,46 +87,6 @@ export default function MarketplacePage() {
     ]);
   }, []);
 
-  
-  const handleConfirmPurchase = async (token: Token) => {
-    if (!address) {
-      alert('Wallet not connected!');
-      return;
-    }
-
-    setBuying(true);
-
-    try {
-      const client = await getClient();
-      if (!client) throw new Error('XRPL client not available');
-
-      const wallet = getWallet();
-      if (!wallet) throw new Error('Wallet not available');
-
-      const issuerAddress = 'rJP2saa6mD796QqKyBUSkxhgkDySkJgnxf'; // Replace with actual issuer address
-      // const rlusdIssuer = 'rEXAMPLERLUSDISSUER'; for future rlusd integration
-
-      const payment: Payment = {
-        TransactionType: 'Payment',
-        Account: address,
-        Destination: issuerAddress,
-        Amount: (parseFloat(token.price) * 1_000_000).toString(), // XRP in drops
-      };
-
-      // Sign & submit
-      const result = await client.submitAndWait(payment, { wallet });
-
-      console.log('Purchase successful:', result);
-      alert(`Successfully purchased ${token.name}!`);
-      setSelectedToken(null);
-    } catch (err) {
-      console.error('Purchase failed:', err);
-      alert('Purchase failed. Check console for details.');
-    } finally {
-      setBuying(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-green-50">
       {/* Header */}
@@ -116,7 +96,7 @@ export default function MarketplacePage() {
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Modal */}
       {selectedToken && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
           <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-lg">
@@ -131,17 +111,26 @@ export default function MarketplacePage() {
               >
                 Cancel
               </button>
-              <button
-                onClick={() => handleConfirmPurchase(selectedToken)}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-              >
-                Confirm Purchase
-              </button>
+
+              {/* Only render the button if client & wallet are ready */}
+              {client && wallet && (
+                <BuyMPTButton
+                  client={client}
+                  wallet={wallet}
+                  mptIssuanceId={tokenMPTMap[selectedToken.id]}
+                  onSuccess={() => {
+                    alert('You are now authorized to hold this MPT!');
+                    setSelectedToken(null);
+                  }}
+                  onError={(err) => alert('Authorization failed: ' + err.message)}
+                />
+              )}
             </div>
           </div>
         </div>
       )}
 
+      {/* Marketplace */}
       <div className="max-w-7xl mx-auto px-4 py-8">
         <h2 className="text-2xl font-bold text-gray-900 mb-6">Available Carbon Credits</h2>
 
