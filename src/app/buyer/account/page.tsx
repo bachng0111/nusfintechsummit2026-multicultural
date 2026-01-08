@@ -1,20 +1,33 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useWallet } from '@/components/buyer/BuyerXRPLProvider';
 import { AlertCircle, Loader2, RefreshCw, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import AccountInfo from '@/components/buyer/AccountInfo';
 import { RetireTokenButton } from '@/components/buyer/RetireTokenButton';
+import { getRequestsForBuyer, PurchaseRequest } from '@/lib/escrow';
+
+// XRPL Devnet explorer URL
+const DEVNET_EXPLORER_URL = 'https://devnet.xrpl.org';
 
 // ---------------- TokenBalance metadata ----------------
 interface TokenBalance {
-  currency: string;              // ticker
+  mptIssuanceId: string;          // MPT issuance ID
+  currency: string;               // ticker
   value: string;
   issuer: string;
-  name: string;                  // token full name
-  icon?: string;                 // token icon URL
+  name: string;                   // token full name
+  icon?: string;                  // token icon URL
   retired?: boolean;
+  projectName?: string;
+  pricePerCredit?: string;
+  certification?: string;
+  vintage?: string;
+  description?: string;
+  ipfsHash?: string;
+  txHash?: string;
+  purchasedAt?: string;
   additional_info?: {
     carbon_tons?: string;
     methodology?: string;
@@ -26,64 +39,34 @@ interface TokenBalance {
   uris?: { category: string; title: string; uri: string }[];
 }
 
+// Minted token structure from localStorage
+interface MintedToken {
+  issuanceId: string;
+  address: string;
+  metadata: {
+    projectName: string;
+    creditType: string;
+    vintage: string;
+    certification: string;
+    location: string;
+    description: string;
+    pricePerCredit: string;
+  };
+  amount: number;
+  timestamp: string;
+  txHash: string;
+  explorerUrl: string;
+  ipfsHash: string;
+}
+
 export default function BuyerAccountPage() {
   const { address, isConnected, getClient } = useWallet();
   const [tokens, setTokens] = useState<TokenBalance[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ---------------- TEST SETUP ----------------
-  const [useMock, setUseMock] = useState(true);
-
-  const mockTokens: TokenBalance[] = [
-    {
-      currency: 'CAR',
-      value: '100',
-      issuer: 'rMockIssuer1',
-      name: 'Carbon Credit Token 1 (MOCK)',
-      icon: 'https://example.org/carbon1.png',
-      additional_info: {
-        carbon_tons: '100',
-        methodology: 'VM0007',
-        project_name: 'Project Alpha',
-        registry: 'Verra',
-        standard: 'VCS',
-        verification_date: '2026-01-01'
-      },
-      uris: [
-        { category: 'docs', title: 'Audit Report', uri: 'https://example.org/report1.pdf' }
-      ]
-    },
-    {
-      currency: 'CAR',
-      value: '50',
-      issuer: 'rMockIssuer2',
-      name: 'Carbon Credit Token 2 (MOCK)',
-      retired: true,
-      additional_info: {
-        carbon_tons: '50',
-        methodology: 'VM0007',
-        project_name: 'Project Beta',
-        registry: 'Verra',
-        standard: 'VCS',
-        verification_date: '2026-01-02'
-      }
-    }
-  ];
-
-  // ---------------- Toggle mock/real button ----------------
-  const toggleMock = () => setUseMock(prev => !prev);
-
-  // ---------------- Fetch tokens ----------------
-  useEffect(() => {
-    if (useMock) {
-      setTokens(mockTokens);
-    } else if (address) {
-      fetchAccountTokens();
-    }
-  }, [address, useMock]);
-
-  const fetchAccountTokens = async () => {
+  // Fetch tokens from XRPL and merge with localStorage metadata
+  const fetchAccountTokens = useCallback(async () => {
     if (!address) return;
     setLoading(true);
     setError(null);
@@ -92,19 +75,96 @@ export default function BuyerAccountPage() {
     try {
       client = await getClient();
 
-      const res = await client.request({
-        command: 'account_lines',
-        account: address,
-        ledger_index: 'validated'
+      // Get all minted tokens from localStorage (for metadata lookup)
+      const mintedTokensRaw = localStorage.getItem('mintedTokens');
+      const mintedTokens: MintedToken[] = mintedTokensRaw ? JSON.parse(mintedTokensRaw) : [];
+
+      // Get completed purchase requests for this buyer
+      const buyerRequests = getRequestsForBuyer(address);
+      const completedPurchases = buyerRequests.filter(r => r.status === 'completed');
+
+      // Fetch MPT holdings from XRPL
+      let mptHoldings: any[] = [];
+      try {
+        const mptRes = await client.request({
+          command: 'account_objects',
+          account: address,
+          type: 'mptoken',
+          ledger_index: 'validated'
+        });
+        mptHoldings = mptRes.result.account_objects || [];
+        console.log('[Account] MPT holdings from XRPL:', mptHoldings);
+      } catch (mptErr) {
+        console.log('[Account] No MPT holdings or error fetching:', mptErr);
+      }
+
+      // Build token balances from MPT holdings + metadata
+      const balances: TokenBalance[] = mptHoldings.map((mpt: any) => {
+        const issuanceId = mpt.MPTokenIssuanceID;
+        
+        // Find matching minted token for metadata
+        const mintedToken = mintedTokens.find(t => t.issuanceId === issuanceId);
+        
+        // Find matching purchase for additional context
+        const purchase = completedPurchases.find(p => p.tokenIssuanceId === issuanceId);
+
+        // MPT value is stored with AssetScale, need to convert
+        // AssetScale: 2 means divide by 100
+        const rawValue = mpt.MPTAmount || '0';
+        const value = (parseInt(rawValue) / 100).toString();
+
+        return {
+          mptIssuanceId: issuanceId,
+          currency: mintedToken?.metadata?.creditType || 'CARBON',
+          value: value,
+          issuer: mintedToken?.address || mpt.issuer || 'Unknown',
+          name: mintedToken?.metadata?.projectName || `Carbon Credit ${issuanceId.slice(0, 8)}...`,
+          projectName: mintedToken?.metadata?.projectName,
+          pricePerCredit: mintedToken?.metadata?.pricePerCredit,
+          certification: mintedToken?.metadata?.certification,
+          vintage: mintedToken?.metadata?.vintage,
+          description: mintedToken?.metadata?.description,
+          ipfsHash: mintedToken?.ipfsHash,
+          txHash: purchase?.txHash || mintedToken?.txHash,
+          purchasedAt: purchase?.createdAt,
+          retired: false,
+          additional_info: {
+            carbon_tons: value,
+            project_name: mintedToken?.metadata?.projectName,
+            standard: mintedToken?.metadata?.certification,
+          }
+        };
       });
 
-      const balances: TokenBalance[] = res.result.lines.map((line: any) => ({
-        currency: line.currency,
-        value: line.balance,
-        issuer: line.account,
-        name: line.currency,        // fallback, real token metadata can enhance this
-        retired: false
-      }));
+      // If no MPT holdings found but we have completed purchases, show those
+      // (This handles the case where XRPL query doesn't return data yet)
+      if (balances.length === 0 && completedPurchases.length > 0) {
+        for (const purchase of completedPurchases) {
+          const mintedToken = mintedTokens.find(t => t.issuanceId === purchase.tokenIssuanceId);
+          
+          balances.push({
+            mptIssuanceId: purchase.tokenIssuanceId,
+            currency: mintedToken?.metadata?.creditType || 'CARBON',
+            value: purchase.tokenAmount.toString(),
+            issuer: purchase.issuerAddress,
+            name: mintedToken?.metadata?.projectName || `Carbon Credit`,
+            projectName: mintedToken?.metadata?.projectName,
+            pricePerCredit: mintedToken?.metadata?.pricePerCredit,
+            certification: mintedToken?.metadata?.certification,
+            vintage: mintedToken?.metadata?.vintage,
+            description: mintedToken?.metadata?.description,
+            ipfsHash: mintedToken?.ipfsHash,
+            txHash: purchase.txHash,
+            purchasedAt: purchase.createdAt,
+            retired: false,
+            additional_info: {
+              carbon_tons: purchase.tokenAmount.toString(),
+              project_name: mintedToken?.metadata?.projectName,
+              standard: mintedToken?.metadata?.certification,
+            }
+          });
+        }
+      }
 
       setTokens(balances);
     } catch (err) {
@@ -114,7 +174,14 @@ export default function BuyerAccountPage() {
       if (client) await client.disconnect();
       setLoading(false);
     }
-  };
+  }, [address, getClient]);
+
+  // ---------------- Fetch tokens on mount and when address changes ----------------
+  useEffect(() => {
+    if (address) {
+      fetchAccountTokens();
+    }
+  }, [address, fetchAccountTokens]);
 
   // ---------------- Account Summary ----------------
   const ownedCount = tokens.filter(t => !t.retired).length;
@@ -144,7 +211,7 @@ export default function BuyerAccountPage() {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
 
-        {/* Page Header + Mock Toggle */}
+        {/* Page Header */}
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">My Account</h1>
@@ -152,38 +219,50 @@ export default function BuyerAccountPage() {
               Manage your carbon credits and track your environmental impact
             </p>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={toggleMock}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              {useMock ? 'Switch to Real Tokens' : 'Switch to Mock Tokens'}
-            </button>
-            <button
-              onClick={fetchAccountTokens}
-              disabled={loading || useMock}
-              className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              <span>Refresh</span>
-            </button>
-          </div>
+          <button
+            onClick={fetchAccountTokens}
+            disabled={loading}
+            className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>{loading ? 'Loading...' : 'Refresh'}</span>
+          </button>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-500" />
+            <p className="text-red-700">{error}</p>
+          </div>
+        )}
 
         {/* Account Summary */}
         <AccountInfo
           ownedCount={ownedCount}
           retiredCount={retiredCount}
           totalVolume={totalVolume}
-          rlusdBalance={0} // update if needed
+          rlusdBalance={0}
         />
 
         {/* Token List */}
-        <div className="bg-white rounded-lg shadow-md p-6 space-y-3">
-          {tokens.length === 0 && (
+        <div className="bg-white rounded-lg shadow-md p-6 space-y-4">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">My Carbon Credits</h2>
+          
+          {loading && tokens.length === 0 && (
+            <div className="text-center py-12">
+              <Loader2 className="w-12 h-12 mx-auto text-green-500 animate-spin mb-3" />
+              <p className="text-gray-600">Loading your carbon credits...</p>
+            </div>
+          )}
+
+          {!loading && tokens.length === 0 && (
             <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed">
               <AlertCircle className="w-12 h-12 mx-auto text-gray-400 mb-3" />
-              <p className="text-gray-600 mb-4">No tokens found in your wallet.</p>
+              <p className="text-gray-600 mb-2">No carbon credits found in your wallet.</p>
+              <p className="text-sm text-gray-500 mb-4">
+                Purchase carbon credits from the marketplace to start offsetting your carbon footprint.
+              </p>
               <Link href="/marketplace" className="inline-block px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
                 Browse Marketplace
               </Link>
@@ -191,38 +270,102 @@ export default function BuyerAccountPage() {
           )}
 
           {tokens.map((token, idx) => (
-            <div key={idx} className="bg-gradient-to-r from-green-50 to-blue-50 p-6 rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
+            <div key={token.mptIssuanceId || idx} className="bg-gradient-to-r from-green-50 to-blue-50 p-6 rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <div className="flex items-center space-x-2 mb-2">
-                    {token.icon && <img src={token.icon} className="w-6 h-6 rounded-full" />}
+                    <span className="text-2xl">🌿</span>
                     <h3 className="text-lg font-semibold text-gray-900">{token.name}</h3>
-                    <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded-full">
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                      token.retired 
+                        ? 'bg-gray-100 text-gray-600' 
+                        : 'bg-green-100 text-green-800'
+                    }`}>
                       {token.retired ? 'RETIRED' : 'ACTIVE'}
                     </span>
                   </div>
-                  <div className="space-y-1 text-sm text-gray-600">
-                    <div>Issuer: {token.issuer}</div>
-                    {token.additional_info?.carbon_tons && (
-                      <div>Carbon Tons: {token.additional_info.carbon_tons}</div>
+                  
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-600 mt-3">
+                    {token.certification && (
+                      <div>
+                        <span className="font-medium">Certification:</span> {token.certification}
+                      </div>
                     )}
-                    {token.additional_info?.methodology && (
-                      <div>Methodology: {token.additional_info.methodology}</div>
+                    {token.vintage && (
+                      <div>
+                        <span className="font-medium">Vintage:</span> {token.vintage}
+                      </div>
                     )}
-                    {token.uris?.map(uri => (
-                      <a key={uri.uri} href={uri.uri} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700 block text-sm">
-                        {uri.title}
+                    <div>
+                      <span className="font-medium">Issuer:</span>{' '}
+                      <code className="bg-gray-100 px-1 rounded text-xs">
+                        {token.issuer.slice(0, 8)}...{token.issuer.slice(-4)}
+                      </code>
+                    </div>
+                    {token.purchasedAt && (
+                      <div>
+                        <span className="font-medium">Purchased:</span>{' '}
+                        {new Date(token.purchasedAt).toLocaleDateString()}
+                      </div>
+                    )}
+                  </div>
+
+                  {token.description && (
+                    <p className="text-sm text-gray-500 mt-2">{token.description}</p>
+                  )}
+
+                  {/* Links */}
+                  <div className="flex gap-4 mt-3">
+                    {token.mptIssuanceId && (
+                      <a
+                        href={`${DEVNET_EXPLORER_URL}/mpt/${token.mptIssuanceId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        View Token
                       </a>
-                    ))}
+                    )}
+                    {token.txHash && (
+                      <a
+                        href={`${DEVNET_EXPLORER_URL}/transactions/${token.txHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        View Transaction
+                      </a>
+                    )}
+                    {token.ipfsHash && (
+                      <a
+                        href={`https://gateway.pinata.cloud/ipfs/${token.ipfsHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        Audit Report
+                      </a>
+                    )}
                   </div>
                 </div>
-                <div className="text-right">
+
+                {/* Token Amount */}
+                <div className="text-right ml-6">
                   <p className="text-3xl font-bold text-green-600">{parseFloat(token.value).toFixed(2)}</p>
                   <p className="text-xs text-gray-500">tons CO₂</p>
+                  {token.pricePerCredit && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      @ {token.pricePerCredit} XRP/credit
+                    </p>
+                  )}
                 </div>
               </div>
 
-              <div className="mt-4 flex gap-2">
+              {/* Action Buttons */}
+              <div className="mt-4 pt-4 border-t border-gray-200 flex gap-2">
                 {!token.retired && (
                   <RetireTokenButton
                     currency={token.currency}
@@ -231,9 +374,9 @@ export default function BuyerAccountPage() {
                     onRetired={() => {
                       setTokens(prev =>
                         prev.map(t =>
-                          t.currency === token.currency ? { ...t, retired: true } : t
+                          t.mptIssuanceId === token.mptIssuanceId ? { ...t, retired: true } : t
                         )
-                      )
+                      );
                     }}
                   />
                 )}
