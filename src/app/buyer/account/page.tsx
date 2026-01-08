@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback } from 'react';
 import { useWallet } from '@/components/buyer/BuyerXRPLProvider';
 import { AlertCircle, Loader2, RefreshCw, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
-import AccountInfo from '@/components/buyer/AccountInfo';
 import { RetireTokenButton } from '@/components/buyer/RetireTokenButton';
 import { getRequestsForBuyer, PurchaseRequest } from '@/lib/escrow';
 
@@ -60,10 +59,11 @@ interface MintedToken {
 }
 
 export default function BuyerAccountPage() {
-  const { address, isConnected, getClient } = useWallet();
+  const { address, isConnected, balance, getClient } = useWallet();
   const [tokens, setTokens] = useState<TokenBalance[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rlusdBalance, setRlusdBalance] = useState<string | null>(null);
 
   // Fetch tokens from XRPL and merge with localStorage metadata
   const fetchAccountTokens = useCallback(async () => {
@@ -166,6 +166,23 @@ export default function BuyerAccountPage() {
         }
       }
 
+      // Fetch RLUSD balance (trust line)
+      try {
+        const linesRes = await client.request({
+          command: 'account_lines',
+          account: address,
+          ledger_index: 'validated'
+        });
+        const rlusdLine = linesRes.result.lines?.find(
+          (line: any) => line.currency === 'RLUSD' || line.currency === '524C555344000000000000000000000000000000'
+        );
+        if (rlusdLine) {
+          setRlusdBalance(rlusdLine.balance);
+        }
+      } catch (rlusdErr) {
+        console.log('[Account] No RLUSD balance or error fetching:', rlusdErr);
+      }
+
       setTokens(balances);
     } catch (err) {
       console.error('Failed to fetch tokens:', err);
@@ -182,11 +199,6 @@ export default function BuyerAccountPage() {
       fetchAccountTokens();
     }
   }, [address, fetchAccountTokens]);
-
-  // ---------------- Account Summary ----------------
-  const ownedCount = tokens.filter(t => !t.retired).length;
-  const retiredCount = tokens.filter(t => t.retired).length;
-  const totalVolume = tokens.reduce((sum, t) => sum + parseFloat(t.value || '0'), 0);
 
   // ---------------- Guard: Not connected ----------------
   if (!isConnected) {
@@ -231,45 +243,103 @@ export default function BuyerAccountPage() {
 
         {/* Error Message */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500" />
-            <p className="text-red-700">{error}</p>
+          <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded">
+            <div className="flex">
+              <AlertCircle className="h-5 w-5 text-red-400 mr-3" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
           </div>
         )}
 
-        {/* Account Summary */}
-        <AccountInfo
-          ownedCount={ownedCount}
-          retiredCount={retiredCount}
-          totalVolume={totalVolume}
-          rlusdBalance={0}
-        />
+        {/* Wallet Info Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Wallet Address Card */}
+          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
+            <p className="text-sm font-medium text-gray-600 mb-2">Wallet Address</p>
+            <div className="flex items-center justify-between">
+              <p className="font-mono text-sm text-gray-900 break-all">
+                {address?.slice(0, 10)}...{address?.slice(-8)}
+              </p>
+              <a
+                href={`${DEVNET_EXPLORER_URL}/accounts/${address}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-2 p-1 hover:bg-gray-100 rounded"
+                title="View on XRPL Explorer"
+              >
+                <ExternalLink className="w-4 h-4 text-gray-500" />
+              </a>
+            </div>
+          </div>
 
-        {/* Token List */}
-        <div className="bg-white rounded-lg shadow-md p-6 space-y-4">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">My Carbon Credits</h2>
+          {/* XRP Balance Card */}
+          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
+            <p className="text-sm font-medium text-gray-600 mb-2">XRP Balance</p>
+            <p className="text-3xl font-bold text-green-600">
+              {balance ? Number(balance).toFixed(2) : '0'}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">Available for transactions</p>
+          </div>
+
+          {/* RLUSD Balance Card */}
+          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
+            <p className="text-sm font-medium text-gray-600 mb-2">RLUSD Balance</p>
+            <p className="text-3xl font-bold text-purple-600">
+              {rlusdBalance ? parseFloat(rlusdBalance).toFixed(2) : '0'}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">Available for purchases</p>
+          </div>
+        </div>
+
+        {/* Carbon Credits Section */}
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h2 className="text-2xl font-semibold text-gray-900">
+                Carbon Credit Tokens
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                {tokens.length} token{tokens.length !== 1 ? 's' : ''} found
+              </p>
+            </div>
+            {tokens.length === 0 && !loading && (
+              <Link
+                href="/marketplace"
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Browse Marketplace
+              </Link>
+            )}
+          </div>
           
           {loading && tokens.length === 0 && (
-            <div className="text-center py-12">
-              <Loader2 className="w-12 h-12 mx-auto text-green-500 animate-spin mb-3" />
-              <p className="text-gray-600">Loading your carbon credits...</p>
+            <div className="flex flex-col items-center justify-center py-12">
+              <Loader2 className="w-12 h-12 animate-spin text-blue-600 mb-4" />
+              <p className="text-gray-600">Loading tokens from XRPL...</p>
             </div>
           )}
 
           {!loading && tokens.length === 0 && (
             <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed">
               <AlertCircle className="w-12 h-12 mx-auto text-gray-400 mb-3" />
-              <p className="text-gray-600 mb-2">No carbon credits found in your wallet.</p>
-              <p className="text-sm text-gray-500 mb-4">
-                Purchase carbon credits from the marketplace to start offsetting your carbon footprint.
+              <p className="text-gray-600 mb-4">
+                No carbon credit tokens found in your wallet.
               </p>
-              <Link href="/marketplace" className="inline-block px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                Browse Marketplace
+              <p className="text-sm text-gray-500 mb-6">
+                Purchase carbon credits from the marketplace to start offsetting your emissions.
+              </p>
+              <Link
+                href="/marketplace"
+                className="inline-block px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Go to Marketplace
               </Link>
             </div>
           )}
 
-          {tokens.map((token, idx) => (
+          {!loading && tokens.length > 0 && (
+            <div className="space-y-3">
+              {tokens.map((token, idx) => (
             <div key={token.mptIssuanceId || idx} className="bg-gradient-to-r from-green-50 to-blue-50 p-6 rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
@@ -365,7 +435,7 @@ export default function BuyerAccountPage() {
               </div>
 
               {/* Action Buttons */}
-              <div className="mt-4 pt-4 border-t border-gray-200 flex gap-2">
+              <div className="mt-4 flex gap-2">
                 {!token.retired && (
                   <RetireTokenButton
                     currency={token.currency}
@@ -380,9 +450,19 @@ export default function BuyerAccountPage() {
                     }}
                   />
                 )}
+                <a
+                  href={`${DEVNET_EXPLORER_URL}/mpt/${token.mptIssuanceId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+                >
+                  Details
+                </a>
               </div>
             </div>
           ))}
+            </div>
+          )}
         </div>
 
       </div>
