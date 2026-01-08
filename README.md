@@ -7,11 +7,12 @@
 **Submission Deadline**: Jan 9, 2026 – 9:00 AM (SGT)
 
 **Team Members**
-- Bach
-- Zheqi
-- Adriel
-- Jingling 
-- Chau
+
+- Nguyen Bach
+- Zeng Zheqi
+- Toh Cheng Hee Adriel
+- Dong Jingling
+- To Bao Chau
 
 **Telegram Contact**: `@beckng`
 
@@ -23,8 +24,8 @@
 
 By representing each carbon credit as a **native XRPL issued asset with verifiable metadata**, VerdeX replaces opaque, off-chain registries with a **transparent, on-chain lifecycle** covering:
 
-- Issuance  
-- Purchase  
+- Issuance
+- Purchase
 - Retirement (burning)
 
 All actions are **publicly verifiable**, **tamper-proof**, and **settled on-chain**, enabling a more credible and efficient carbon market.
@@ -98,6 +99,7 @@ XRP Ledger (XRPL Testnet)
 **Role:** Carbon credit creation and listing
 
 **Features:**
+
 - XRPL **Issuer Account**
 - Token issuance via a single button click
 - Minting **multi-purpose carbon credit tokens** (MPTokens)
@@ -111,6 +113,7 @@ XRP Ledger (XRPL Testnet)
 **Role:** Purchasing, holding, and retiring carbon credits
 
 **Features:**
+
 - Maintain **XRP balance**
 - Purchase listed carbon credit tokens using **XRP**
 - Account overview:
@@ -125,6 +128,7 @@ XRP Ledger (XRPL Testnet)
 ## Dashboard & Token Information
 
 ### Lifecycle Dashboard
+
 - Visualizes the full lifecycle of each carbon credit:
   - Issuance details
   - Trading history
@@ -133,6 +137,7 @@ XRP Ledger (XRPL Testnet)
 - Provides an immutable audit trail for verification
 
 ### Token Information Page
+
 - Token metadata (project details, vintage year)
 - Current ownership status
 - Complete transaction history
@@ -145,6 +150,7 @@ XRP Ledger (XRPL Testnet)
 For the hackathon MVP, we focus on demonstrating the **full on-chain lifecycle of carbon credits** on XRPL.
 
 ### Included in MVP
+
 - Multiple Purpose Token issuance
 - XRP-based payment transactions
 - Conditional transaction via escrow
@@ -152,6 +158,7 @@ For the hackathon MVP, we focus on demonstrating the **full on-chain lifecycle o
 - Public lifecycle visualization dashboard
 
 ### Out of Scope
+
 - Real-world carbon measurement
 - Regulatory certification
 - Full KYC / compliance integration
@@ -160,11 +167,11 @@ For the hackathon MVP, we focus on demonstrating the **full on-chain lifecycle o
 
 ## XRPL Features Used (Key Scoring Section)
 
-- **XRPL Accounts** – Separate issuer and buyer accounts with distinct roles  
-- **Issued MPTokens** – Carbon credits represented as native XRPL tokens  
+- **XRPL Accounts** – Separate issuer and buyer accounts with distinct roles
+- **Issued MPTokens** – Carbon credits represented as native XRPL tokens
 - **Transaction Memos** – JSON metadata embedded on-chain
-- **XRPL Escrow** – Conditional XRP settlement requiring issuer approval before asset transfer  
-- **Token Retirement** – Transfer to a designated retirement address to prevent double counting  
+- **XRPL Escrow** – Conditional XRP settlement requiring issuer approval before asset transfer
+- **Token Retirement** – Transfer to a designated retirement address to prevent double counting
 
 ---
 
@@ -237,6 +244,7 @@ Retirement transaction is confirmed on-chain and can be verified, ensuring that 
 **Demo Link**: https://youtube.com/your-demo-link
 
 The demo video includes:
+
 - Wallet connection
 - Carbon credit issuance
 - Carbon credit purchase
@@ -260,37 +268,39 @@ The demo video includes:
 
 ### Ripple XRPL Challenge
 
-| Criterion | How VerdeX Addresses It |
-|--------|---------------------------|
+| Criterion          | How VerdeX Addresses It                 |
+| ------------------ | --------------------------------------- |
 | Business Potential | Real-world carbon market infrastructure |
-| Creativity | XRPL-native asset lifecycle design |
-| Use of XRPL | Escrow, MPTokens, retirement |
-| Completeness | Fully testable end-to-end MVP |
+| Creativity         | XRPL-native asset lifecycle design      |
+| Use of XRPL        | Escrow, MPTokens, retirement            |
+| Completeness       | Fully testable end-to-end MVP           |
 
 ---
 
 ## BGA Bounty – SDG Alignment
 
-**Primary UN SDG:**  
+**Primary UN SDG:**
+
 - **SDG 13 – Climate Action**
 
 **Why VerdeX Qualifies for BGA:**
-- **Transparency** – Immutable XRPL records prevent fraud  
-- **Traceability** – End-to-end tracking of carbon credits  
-- **Security** – On-chain asset lifecycle eliminates double spending  
-- **Sustainability** – Enables credible carbon offsetting  
+
+- **Transparency** – Immutable XRPL records prevent fraud
+- **Traceability** – End-to-end tracking of carbon credits
+- **Security** – On-chain asset lifecycle eliminates double spending
+- **Sustainability** – Enables credible carbon offsetting
 
 ---
 
 ## BGA Rubric Mapping
 
-| Rubric | Explanation |
-|-----|-------------|
-| Social Impact (30%) | Verifiable, transparent carbon offsetting |
-| Technical Implementation (20%) | XRPL-native token lifecycle |
-| Innovation (20%) | On-chain retirement & certificates |
-| Sustainability & Scalability (20%) | Low-cost, global XRPL infrastructure |
-| Presentation (10%) | Live demo + lifecycle dashboard |
+| Rubric                             | Explanation                               |
+| ---------------------------------- | ----------------------------------------- |
+| Social Impact (30%)                | Verifiable, transparent carbon offsetting |
+| Technical Implementation (20%)     | XRPL-native token lifecycle               |
+| Innovation (20%)                   | On-chain retirement & certificates        |
+| Sustainability & Scalability (20%) | Low-cost, global XRPL infrastructure      |
+| Presentation (10%)                 | Live demo + lifecycle dashboard           |
 
 ---
 
@@ -298,10 +308,10 @@ The demo video includes:
 
 - RLUSD integration
 - Transition to Mainnet
-- DID integration for issuer verification  
-- Integration with real carbon registries  
-- Compliance-aware certificate issuance  
-- Institutional and enterprise onboarding  
+- DID integration for issuer verification
+- Integration with real carbon registries
+- Compliance-aware certificate issuance
+- Institutional and enterprise onboarding
 
 ---
 
