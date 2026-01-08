@@ -178,6 +178,93 @@ For the hackathon MVP, we focus on demonstrating the **full on-chain lifecycle**
 
 ---
 
+## 🔧 XRPL Key Features Used
+
+CarbonX is built entirely using **XRPL-native primitives**, without relying on smart contracts or off-chain enforcement. The following XRPL features are core to the system design:
+
+### 1️⃣ XRPL Accounts (Role-Based Architecture)
+
+We use multiple XRPL accounts with clearly defined roles:
+
+- **Issuer Accounts**: Responsible for minting carbon credit tokens and embedding metadata.
+- **Buyer Accounts**: Hold RLUSD, purchase carbon credits, and trigger retirement.
+- **Retirement Address**: A designated, unspendable XRPL address used to permanently retire tokens.
+
+This separation of concerns ensures transparency, security, and clear lifecycle boundaries for each carbon credit.
+
+---
+
+### 2️⃣ Multi-Purpose Tokens (Issued Assets with Metadata)
+
+Each carbon credit is represented as a **multi-purpose XRPL issued asset**.
+
+- Tokens are issued by an issuer account
+- Each token represents **one unit of carbon offset**
+- Metadata describing the underlying carbon project is embedded using:
+  - On-chain transaction memos (JSON)
+  - Off-chain JSON referenced by hash
+- Metadata includes:
+  - Project ID
+  - Project location
+  - Vintage year
+  - Registry reference (simulated for MVP)
+
+This design allows a single token type to support multiple lifecycle stages: issuance → trading → escrow → retirement.
+
+---
+
+### 3️⃣ XRPL Native DEX (Peer-to-Peer Trading)
+
+Carbon credits can be traded directly on the **XRPL native decentralized exchange (DEX)**.
+
+- Buyers purchase carbon credits using **RLUSD**
+- Orders are settled via XRPL’s orderbook
+- No centralized brokers or intermediaries are required
+- All trades are transparent and publicly verifiable
+
+This enables efficient price discovery and low-cost settlement.
+
+---
+
+### 4️⃣ Token Escrow (Conditional Asset Control)
+
+We use **XRPL Escrow transactions** to demonstrate conditional control over carbon credit tokens.
+
+- Escrows can be used to:
+  - Temporarily lock tokens during a transaction flow
+  - Ensure atomic settlement conditions
+  - Prevent premature transfers
+- Escrow release conditions are enforced directly by XRPL
+
+This mechanism showcases how XRPL can support **trust-minimized conditional flows** without smart contracts.
+
+---
+
+### 5️⃣ RLUSD Integration (Stable Settlement Asset)
+
+RLUSD is used as the primary settlement currency for carbon credit purchases.
+
+- Provides price stability for real-world use cases
+- Avoids volatility associated with native cryptocurrencies
+- Enables enterprise-friendly accounting and settlement
+
+---
+
+### 6️⃣ On-Chain Carbon Credit Retirement
+
+Carbon credit retirement is triggered explicitly when a buyer redeems a credit.
+
+- Upon redemption, the token is transferred to a **designated XRPL retirement address**
+- This action permanently removes the token from circulation
+- The retirement event is:
+  - Public
+  - Immutable
+  - Verifiable on-chain
+
+Only after the retirement transaction is confirmed does the system issue a **retirement certificate**, ensuring that double counting is prevented by design.
+
+---
+
 
 ---
 
