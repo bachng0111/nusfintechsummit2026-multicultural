@@ -211,6 +211,21 @@ export default function MarketplacePage() {
       );
       setBuyerRequests(updatedRequests);
 
+      // Remove the purchased token from localStorage and update state
+      const storedTokens = localStorage.getItem('mintedTokens');
+      if (storedTokens) {
+        try {
+          const parsedTokens: MintedToken[] = JSON.parse(storedTokens);
+          const updatedTokens = parsedTokens.filter(
+            (t) => t.issuanceId !== request.tokenIssuanceId
+          );
+          localStorage.setItem('mintedTokens', JSON.stringify(updatedTokens));
+          setTokens(updatedTokens);
+        } catch (err) {
+          console.error('Failed to update localStorage after purchase:', err);
+        }
+      }
+
       alert('Payment escrow created! The issuer will now complete the transaction and send you the tokens.');
     } catch (err) {
       console.error('Payment failed:', err);
