@@ -8,6 +8,7 @@ import { Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 // TYPES
 
 interface RetireTokenButtonProps {
+  mptIssuanceId: string;  // MPT Issuance ID for the token
   currency: string;
   issuer: string;
   amount: string;
@@ -16,6 +17,7 @@ interface RetireTokenButtonProps {
 
 interface RetirementCertificate {
   certificateId: string;
+  mptIssuanceId: string;
   currency: string;
   issuer: string;
   amount: string;
@@ -28,19 +30,20 @@ interface RetirementCertificate {
 
 // Known XRPL "black hole" addresses that no one controls
 const BURNER_ADDRESSES = {
-  // Standard black hole (all r's)
+  // Standard black hole (account that cannot sign transactions)
   BLACK_HOLE: 'rrrrrrrrrrrrrrrrrrrrrhoLvTp',
   
-  // Test burner (if you control it for tracking)
-  CUSTOM: 'rJP2saa6mD796QqKyBUSkxhgkDySkJgnxf',
+  // Alternative black hole
+  ACCOUNT_ZERO: 'rrrrrrrrrrrrrrrrrrrn5RM1rHd',
 };
 
-// Use the black hole for true retirement
-const BURNER_ADDRESS = BURNER_ADDRESSES.CUSTOM;
+// Use the standard black hole for true retirement
+const BURNER_ADDRESS = BURNER_ADDRESSES.BLACK_HOLE;
 
 // COMPONENT
 
 export function RetireTokenButton({ 
+  mptIssuanceId,
   currency, 
   issuer, 
   amount, 
@@ -54,6 +57,8 @@ export function RetireTokenButton({
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // RETIREMENT LOGIC
+  // For MPT tokens, we send the tokens back to the issuer to "retire" them
+  // The issuer can then burn them or keep them in their treasury
 
   const handleRetire = async () => {
     setIsRetiring(true);
@@ -73,15 +78,18 @@ export function RetireTokenButton({
     try {
       client = await getClient();
 
-      // Create retirement transaction
-      const retireTx: xrpl.Payment = {
-        TransactionType: 'Payment',
+      // Convert amount to smallest unit (AssetScale: 2 means multiply by 100)
+      const amountInSmallestUnit = Math.floor(parseFloat(amount) * 100).toString();
+
+      // For MPT retirement, send tokens back to the ISSUER
+      // This is the standard way to "retire" carbon credits - return them to issuer
+      const retireTx = {
+        TransactionType: 'Payment' as const,
         Account: wallet.address,
-        Destination: BURNER_ADDRESS,
+        Destination: issuer, // Send back to issuer for retirement
         Amount: {
-          currency: currency,
-          value: amount,
-          issuer: issuer,
+          mpt_issuance_id: mptIssuanceId,
+          value: amountInSmallestUnit,
         },
         Memos: [
           {
@@ -90,10 +98,10 @@ export function RetireTokenButton({
               MemoData: xrpl.convertStringToHex(
                 JSON.stringify({
                   action: 'CARBON_CREDIT_RETIREMENT',
-                  currency: currency,
+                  mptIssuanceId: mptIssuanceId,
                   amount: amount,
                   timestamp: Date.now(),
-                  issuer: issuer,
+                  reason: 'Carbon offset retirement',
                 })
               ),
             },
@@ -101,27 +109,17 @@ export function RetireTokenButton({
         ],
       };
 
-      console.log('📤 Submitting retirement transaction:', retireTx);
+      console.log('📤 Submitting MPT retirement transaction (sending to issuer):', retireTx);
 
-      // Submit and wait for confirmation
-      const response = await client.submitAndWait(retireTx, { wallet });
+      // Autofill, sign, and submit
+      const prepared = await client.autofill(retireTx);
+      const signed = wallet.sign(prepared);
+      const response = await client.submitAndWait(signed.tx_blob);
 
       console.log('📨 Transaction response:', response);
 
       // Check transaction result
-      let txResult = 'Unknown';
-      
-      // XRPL returns the result in different places depending on version
-      if (response.result.meta && typeof response.result.meta === 'object') {
-        if ('TransactionResult' in response.result.meta) {
-          txResult = response.result.meta.TransactionResult as string;
-        }
-      }
-      
-      // Fallback to engine_result
-      if (txResult === 'Unknown' && 'engine_result' in response.result) {
-        txResult = response.result.engine_result as string;
-      }
+      const txResult = (response.result.meta as { TransactionResult?: string })?.TransactionResult || 'Unknown';
 
       console.log('✅ Transaction result:', txResult);
 
@@ -129,15 +127,21 @@ export function RetireTokenButton({
       if (txResult === 'tesSUCCESS') {
         const certificate: RetirementCertificate = {
           certificateId: crypto.randomUUID(),
+          mptIssuanceId,
           currency,
           issuer,
           amount,
           retiredAt: new Date().toISOString(),
           txHash: response.result.hash,
-          burnerAddress: BURNER_ADDRESS,
+          burnerAddress: issuer, // Tokens returned to issuer for retirement
         };
 
-        setSuccessMessage(`Token retired successfully!`);
+        // Save certificate to localStorage
+        const existingCerts = JSON.parse(localStorage.getItem('retirementCertificates') || '[]');
+        existingCerts.push(certificate);
+        localStorage.setItem('retirementCertificates', JSON.stringify(existingCerts));
+
+        setSuccessMessage(`Token retired successfully! Certificate ID: ${certificate.certificateId.slice(0, 8)}...`);
         
         // Call parent callback
         if (onRetired) {
@@ -153,12 +157,14 @@ export function RetireTokenButton({
       console.error('❌ Retirement error:', err);
 
       // Handle specific XRPL errors
-      if (err.message.includes('tecUNFUNDED')) {
-        setError('Insufficient XRP for transaction fees (~0.00001 XRP needed)');
-      } else if (err.message.includes('tecNO_LINE')) {
-        setError('Trustline issue. Make sure you own this token.');
-      } else if (err.message.includes('tecINSUF_RESERVE_LINE')) {
+      if (err.message?.includes('tecUNFUNDED') || err.message?.includes('unfunded')) {
+        setError('Insufficient token balance to retire');
+      } else if (err.message?.includes('tecNO_LINE') || err.message?.includes('tecNO_AUTH')) {
+        setError('Token authorization issue. The burn address may not be authorized for this MPT.');
+      } else if (err.message?.includes('tecINSUF_RESERVE')) {
         setError('Insufficient XRP reserve. You need at least 10 XRP in your account.');
+      } else if (err.message?.includes('tecNO_DST')) {
+        setError('Destination address does not exist or cannot receive this token.');
       } else {
         setError(`Retirement failed: ${err.message || 'Unknown error'}`);
       }
@@ -183,7 +189,7 @@ export function RetireTokenButton({
               <strong>Warning:</strong> This action is permanent and cannot be undone.
             </p>
             <p className="text-sm text-yellow-800">
-              The token will be sent to a burn address and permanently removed from circulation.
+              The carbon credits will be sent back to the issuer for retirement, permanently removing them from your wallet and marking them as offset.
             </p>
           </div>
 
@@ -195,12 +201,18 @@ export function RetireTokenButton({
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Amount:</span>
-                <span className="font-semibold">{amount}</span>
+                <span className="font-semibold">{amount} tons CO₂</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Burn Address:</span>
+                <span className="text-gray-600">MPT ID:</span>
                 <span className="font-mono text-xs">
-                  {BURNER_ADDRESS.slice(0, 8)}...{BURNER_ADDRESS.slice(-6)}
+                  {mptIssuanceId.slice(0, 8)}...{mptIssuanceId.slice(-6)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Return to:</span>
+                <span className="font-mono text-xs">
+                  Issuer ({issuer.slice(0, 6)}...{issuer.slice(-4)})
                 </span>
               </div>
             </div>

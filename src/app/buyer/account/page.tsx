@@ -441,6 +441,7 @@ export default function BuyerAccountPage() {
               <div className="mt-4 flex gap-2">
                 {!token.retired && (
                   <RetireTokenButton
+                    mptIssuanceId={token.mptIssuanceId}
                     currency={token.currency}
                     issuer={token.issuer}
                     amount={token.value}
