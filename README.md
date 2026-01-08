@@ -79,6 +79,7 @@ By leveraging XRPL’s **native decentralized exchange (DEX)** and **RLUSD**, ca
 
 ## 🏗️ System Architecture
 
+```text
 Web Frontend
   │
   │  XRPL SDK
@@ -91,9 +92,7 @@ XRP Ledger (XRPL Testnet)
  ├── RLUSD Payments
  ├── DEX Trading
  └── Retirement Address
-
-
----
+```
 
 ## 🔐 XRPL Accounts & Features
 
@@ -203,16 +202,14 @@ The demo video includes:
 
 ## 📂 Repository Structure
 
+```text
 .
 ├── frontend/
 ├── backend/
 ├── dashboard/
 ├── scripts/
 └── README.md
-
-
-
----
+```
 
 ## 🎯 Hackathon Rubric Alignment
 
