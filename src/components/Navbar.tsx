@@ -27,7 +27,7 @@ export default function Navbar() {
           <Link href="/" className="flex items-center space-x-2 group">
             <Leaf className="w-8 h-8 text-green-600 group-hover:text-green-700 transition-colors" />
             <span className="text-xl font-bold text-gray-900 group-hover:text-green-600 transition-colors">
-              CarbonLedger
+              VerdeX
             </span>
           </Link>
 

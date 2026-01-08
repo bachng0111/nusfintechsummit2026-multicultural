@@ -387,7 +387,7 @@ export default function IssuerPage() {
         icon: 'https://example.org/carbon-icon.png',
         asset_class: 'rwa',
         asset_subclass: 'other',
-        issuer_name: 'CarbonLedger',
+        issuer_name: 'VerdeX',
         uris: [
           {
             uri: `ipfs://${ipfsHash}`,
@@ -395,9 +395,9 @@ export default function IssuerPage() {
             title: 'Audit Report'
           },
           {
-            uri: 'https://carbonledger.example.com',
+            uri: 'https://verdex.example.com',
             category: 'website', 
-            title: 'CarbonLedger Platform'
+            title: 'VerdeX Platform'
           }
         ],
         additional_info: {
@@ -520,7 +520,7 @@ export default function IssuerPage() {
       <div className="max-w-3xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-carbon-800">🌿 CarbonLedger</h1>
+            <h1 className="text-3xl font-bold text-carbon-800">🌿 VerdeX</h1>
             <p className="text-carbon-600">Issuer Portal - MPT Token Issuance</p>
           </div>
           <WalletConnectButton />

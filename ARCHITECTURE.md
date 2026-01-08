@@ -1,4 +1,4 @@
-# 🏗️ CarbonLedger - Software Architecture & Workflow
+# 🏗️ VerdeX - Software Architecture & Workflow
 
 ## 📋 Table of Contents
 - [Overview](#overview)
@@ -14,7 +14,7 @@
 
 ## Overview
 
-**CarbonLedger** is a decentralized Real World Asset (RWA) marketplace for carbon credits built on the XRP Ledger (XRPL). The platform enables project owners (Issuers) to tokenize verified carbon credits as blockchain-based assets, providing transparency, traceability, and liquidity for environmental assets.
+**VerdeX** is a decentralized Real World Asset (RWA) marketplace for carbon credits built on the XRP Ledger (XRPL). The platform enables project owners (Issuers) to tokenize verified carbon credits as blockchain-based assets, providing transparency, traceability, and liquidity for environmental assets.
 
 ### Key Objectives
 - 🌱 **Tokenization**: Convert real-world carbon credits into XRPL tokens

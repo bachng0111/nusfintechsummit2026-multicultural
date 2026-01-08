@@ -1,4 +1,4 @@
-# 🌿 CarbonLedger - Issuer Portal (RWA Minter)
+# 🌿 VerdeX - Issuer Portal (RWA Minter)
 
 This component handles the **supply side** of the marketplace. It allows project owners to tokenize Real World Assets (Carbon Credits) on the XRPL.
 
