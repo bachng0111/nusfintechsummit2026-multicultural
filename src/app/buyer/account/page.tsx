@@ -59,7 +59,7 @@ interface MintedToken {
 }
 
 export default function BuyerAccountPage() {
-  const { address, isConnected, balance, getClient } = useWallet();
+  const { address, isConnected, balance, getClient, refreshBalance } = useWallet();
   const [tokens, setTokens] = useState<TokenBalance[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -232,7 +232,10 @@ export default function BuyerAccountPage() {
             </p>
           </div>
           <button
-            onClick={fetchAccountTokens}
+            onClick={() => {
+              fetchAccountTokens();
+              refreshBalance();
+            }}
             disabled={loading}
             className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
           >

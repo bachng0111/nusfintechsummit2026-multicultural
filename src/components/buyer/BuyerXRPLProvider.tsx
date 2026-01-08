@@ -16,6 +16,7 @@ interface WalletContextType {
   disconnect: () => void
   getClient: () => Promise<xrpl.Client>
   getWallet: () => xrpl.Wallet | null
+  refreshBalance: () => Promise<void>
 };
 
 const WalletContext = createContext<WalletContextType>({
@@ -29,6 +30,7 @@ const WalletContext = createContext<WalletContextType>({
   disconnect: () => {},
   getClient: async () => new xrpl.Client(XRPL_DEVNET),
   getWallet: () => null,
+  refreshBalance: async () => {},
 });
 
 export function useWallet() {
@@ -147,6 +149,39 @@ export function XRPLProvider({ children }: { children: ReactNode }) {
     sessionStorage.removeItem('xrpl_wallet_seed');
   }, []);
 
+  // Refresh balance from XRPL
+  const refreshBalance = useCallback(async () => {
+    if (!address) return;
+    
+    let client;
+    try {
+      client = new xrpl.Client(XRPL_DEVNET);
+      await client.connect();
+      const xrpBalance = await client.getXrpBalance(address);
+      setBalance(String(xrpBalance));
+      console.log('[Balance] Refreshed:', xrpBalance, 'XRP');
+    } catch (err) {
+      console.error('[Balance] Failed to refresh:', err);
+    } finally {
+      if (client) await client.disconnect();
+    }
+  }, [address]);
+
+  // Auto-refresh balance every 10 seconds when connected
+  useEffect(() => {
+    if (!address) return;
+    
+    // Initial refresh
+    refreshBalance();
+    
+    // Set up interval for periodic refresh
+    const intervalId = setInterval(() => {
+      refreshBalance();
+    }, 10000); // 10 seconds
+    
+    return () => clearInterval(intervalId);
+  }, [address, refreshBalance]);
+
   // Get a connected client
   const getClient = useCallback(async () => {
     const client = new xrpl.Client(XRPL_DEVNET);
@@ -172,6 +207,7 @@ export function XRPLProvider({ children }: { children: ReactNode }) {
         disconnect,
         getClient,
         getWallet,
+        refreshBalance,
       }}
     >
       {children}
