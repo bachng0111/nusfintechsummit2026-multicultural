@@ -79,6 +79,12 @@ export default function BuyerAccountPage() {
       const archiveRaw = localStorage.getItem('allMintedTokensArchive');
       const allTokensForLookup: MintedToken[] = archiveRaw ? JSON.parse(archiveRaw) : [];
 
+      // Get retirement certificates to check retired status and preserve original values
+      const retirementCertsRaw = localStorage.getItem('retirementCertificates');
+      const retirementCerts: { mptIssuanceId: string; amount: string; retiredAt: string; txHash: string }[] = 
+        retirementCertsRaw ? JSON.parse(retirementCertsRaw) : [];
+      const retiredTokenMap = new Map(retirementCerts.map(cert => [cert.mptIssuanceId, cert]));
+
       // Get completed purchase requests for this buyer
       const buyerRequests = getRequestsForBuyer(address);
       const completedPurchases = buyerRequests.filter(r => r.status === 'completed');
@@ -108,10 +114,17 @@ export default function BuyerAccountPage() {
         // Find matching purchase for additional context
         const purchase = completedPurchases.find(p => p.tokenIssuanceId === issuanceId);
 
+        // Check if token is retired
+        const retirementCert = retiredTokenMap.get(issuanceId);
+        const isRetired = !!retirementCert;
+
         // MPT value is stored with AssetScale, need to convert
         // AssetScale: 2 means divide by 100
         const rawValue = mpt.MPTAmount || '0';
-        const value = (parseInt(rawValue) / 100).toString();
+        // Use retirement certificate amount if retired, otherwise use XRPL value
+        const value = isRetired && retirementCert?.amount 
+          ? retirementCert.amount 
+          : (parseInt(rawValue) / 100).toString();
 
         return {
           mptIssuanceId: issuanceId,
@@ -127,7 +140,7 @@ export default function BuyerAccountPage() {
           ipfsHash: matchedToken?.ipfsHash,
           txHash: purchase?.txHash || matchedToken?.txHash,
           purchasedAt: purchase?.createdAt,
-          retired: false,
+          retired: isRetired,
           additional_info: {
             carbon_tons: value,
             project_name: matchedToken?.metadata?.projectName,
@@ -136,16 +149,53 @@ export default function BuyerAccountPage() {
         };
       });
 
+      // Add retired tokens that are no longer in MPT holdings (already sent to issuer)
+      for (const cert of retirementCerts) {
+        const alreadyInBalances = balances.some(b => b.mptIssuanceId === cert.mptIssuanceId);
+        if (!alreadyInBalances) {
+          const matchedToken = allTokensForLookup.find(t => t.issuanceId === cert.mptIssuanceId);
+          const purchase = completedPurchases.find(p => p.tokenIssuanceId === cert.mptIssuanceId);
+          
+          balances.push({
+            mptIssuanceId: cert.mptIssuanceId,
+            currency: matchedToken?.metadata?.creditType || 'CARBON',
+            value: cert.amount,
+            issuer: matchedToken?.address || purchase?.issuerAddress || 'Unknown',
+            name: matchedToken?.metadata?.projectName || `Carbon Credit`,
+            projectName: matchedToken?.metadata?.projectName,
+            pricePerCredit: matchedToken?.metadata?.pricePerCredit,
+            certification: matchedToken?.metadata?.certification,
+            vintage: matchedToken?.metadata?.vintage,
+            description: matchedToken?.metadata?.description,
+            ipfsHash: matchedToken?.ipfsHash,
+            txHash: cert.txHash,
+            purchasedAt: purchase?.createdAt,
+            retired: true,
+            additional_info: {
+              carbon_tons: cert.amount,
+              project_name: matchedToken?.metadata?.projectName,
+              standard: matchedToken?.metadata?.certification,
+            }
+          });
+        }
+      }
+
       // If no MPT holdings found but we have completed purchases, show those
       // (This handles the case where XRPL query doesn't return data yet)
       if (balances.length === 0 && completedPurchases.length > 0) {
         for (const purchase of completedPurchases) {
           const matchedToken = allTokensForLookup.find(t => t.issuanceId === purchase.tokenIssuanceId);
+          const retirementCert = retiredTokenMap.get(purchase.tokenIssuanceId);
+          const isRetired = !!retirementCert;
+          // Use retirement cert amount if retired, otherwise use purchase amount
+          const value = isRetired && retirementCert?.amount 
+            ? retirementCert.amount 
+            : purchase.tokenAmount.toString();
           
           balances.push({
             mptIssuanceId: purchase.tokenIssuanceId,
             currency: matchedToken?.metadata?.creditType || 'CARBON',
-            value: purchase.tokenAmount.toString(),
+            value: value,
             issuer: purchase.issuerAddress,
             name: matchedToken?.metadata?.projectName || `Carbon Credit`,
             projectName: matchedToken?.metadata?.projectName,
@@ -154,11 +204,11 @@ export default function BuyerAccountPage() {
             vintage: matchedToken?.metadata?.vintage,
             description: matchedToken?.metadata?.description,
             ipfsHash: matchedToken?.ipfsHash,
-            txHash: purchase.txHash,
+            txHash: isRetired ? retirementCert?.txHash : purchase.txHash,
             purchasedAt: purchase.createdAt,
-            retired: false,
+            retired: isRetired,
             additional_info: {
-              carbon_tons: purchase.tokenAmount.toString(),
+              carbon_tons: value,
               project_name: matchedToken?.metadata?.projectName,
               standard: matchedToken?.metadata?.certification,
             }
