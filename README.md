@@ -1,37 +1,37 @@
-# 🌱 CarbonX – RWA Tokenization for Carbon Credits on XRPL
+# VerdeX – RWA Tokenization for Carbon Credits on XRPL
 
 > **A transparent, trust-minimized carbon credit marketplace built on the XRP Ledger (XRPL)**
 
-📌 **Hackathon**: NUS FinTech Summit 2026 – Ripple XRPL Challenge  
-🏆 **Bounty Track**: BGA (Blockchain for Good & SDGs)  
-📅 **Submission Deadline**: Jan 9, 2026 – 9:00 AM (SGT)
+**Hackathon**: NUS FinTech Summit 2026 – Ripple XRPL Challenge  
+**Bounty Track**: BGA (Blockchain for Good & SDGs), Ripple Bounty: Feedback Challenge
+**Submission Deadline**: Jan 9, 2026 – 9:00 AM (SGT)
 
-👥 **Team Members**
-- Bach – Issuer Account & Token Issuance  
-- Zheqi – Issuer Account & Metadata Handling  
-- Adriel – Buyer Account & Trading Logic  
-- Jingling – Buyer Account & Retirement Logic  
-- Chau – Dashboard & Token Information Page  
+**Team Members**
+- Bach
+- Zheqi
+- Adriel
+- Jingling 
+- Chau
 
-📱 **Telegram Contact**: `@your_telegram_handle`
+**Telegram Contact**: `@beckng`
 
 ---
 
-## 🚀 Overview
+## Overview
 
-**CarbonX** is a **Minimum Viable Product (MVP)** that demonstrates how **carbon credits can be tokenized as real-world assets (RWAs)** on the **XRP Ledger (XRPL)**.
+**VerdeX** is a **Minimum Viable Product (MVP)** that demonstrates how **carbon credits can be tokenized as real-world assets (RWAs)** on the **XRP Ledger (XRPL)**.
 
-By representing each carbon credit as a **native XRPL issued asset with verifiable metadata**, CarbonX replaces opaque, off-chain registries with a **transparent, on-chain lifecycle** covering:
+By representing each carbon credit as a **native XRPL issued asset with verifiable metadata**, VerdeX replaces opaque, off-chain registries with a **transparent, on-chain lifecycle** covering:
 
 - Issuance  
-- Trading  
+- Purchase  
 - Retirement (burning)
 
 All actions are **publicly verifiable**, **tamper-proof**, and **settled on-chain**, enabling a more credible and efficient carbon market.
 
 ---
 
-## ❗ Current Problem
+## Current Problem
 
 The global carbon credit market suffers from fundamental issues that limit its effectiveness and credibility:
 
@@ -51,23 +51,21 @@ The global carbon credit market suffers from fundamental issues that limit its e
 
 ---
 
-## 💡 Proposed Solution
+## Proposed Solution
 
 We propose **tokenizing carbon credits as Real-World Assets (RWAs) on the XRP Ledger (XRPL)**.
 
-Each carbon credit is represented as a **native XRPL issued token** with embedded metadata describing the underlying project, location, registry reference, and vintage year. Ownership, transfers, and retirement are all recorded **directly on-chain**, creating an immutable and auditable record of climate impact.
-
-By leveraging XRPL’s **native decentralized exchange (DEX)** and **RLUSD**, carbon credits can be traded peer-to-peer without centralized intermediaries. On-chain retirement mechanisms ensure that each credit can only be used once, preventing double counting by design.
+Each carbon credit is represented as a **native XRPL issued token** with embedded metadata describing the underlying project, location, registry reference, and vintage year. Ownership, transfers, and retirement are all recorded **directly on-chain**, creating an immutable and auditable record of climate impact. On-chain retirement mechanisms ensure that each credit can only be used once, preventing double counting by design.
 
 ---
 
-## 🧠 How It Works
+## How It Works
 
 1. **Issuance**  
    A project issuer mints carbon credits on XRPL as issued assets with embedded metadata.
 
 2. **Trading**  
-   Buyers purchase and trade carbon credits on the XRPL DEX using **RLUSD**.
+   Buyers purchase and trade carbon credits on the VerdeX marketplace using **XRP**.
 
 3. **Retirement**  
    When a carbon credit is used to offset emissions, the corresponding token is permanently retired on-chain.
@@ -77,7 +75,7 @@ By leveraging XRPL’s **native decentralized exchange (DEX)** and **RLUSD**, ca
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 ```text
 Web Frontend
@@ -89,49 +87,42 @@ Backend Services
   ▼
 XRP Ledger (XRPL Testnet)
  ├── Issued Assets (Carbon Credits)
- ├── RLUSD Payments
- ├── DEX Trading
+ ├── XRP Payments using XRPL Escrow
  └── Retirement Address
 ```
 
-## 🔐 XRPL Accounts & Features
+## XRPL Accounts & Features
 
-### 1️⃣ Issuer Accounts (Bach & Zheqi)
+### Issuer Accounts
 
 **Role:** Carbon credit creation and listing
 
 **Features:**
 - XRPL **Issuer Account**
 - Token issuance via a single button click
-- Minting **multi-purpose carbon credit tokens**
-- Embedded metadata uploaded as JSON (project ID, location, vintage year, registry reference)
+- Minting **multi-purpose carbon credit tokens** (MPTokens)
 - Metadata referenced on-chain via XRPL transaction memos
-- Connection to **CrossMark Wallet**
-- Each issued token represents **one unit of carbon offset**
+- Each issued token represents **a specified number of unit(s) of carbon offset**
 
 ---
 
-### 2️⃣ Buyer Accounts (Adriel & Jingling)
+### Buyer Accounts
 
 **Role:** Purchasing, holding, and retiring carbon credits
 
 **Features:**
-- Connect to **CrossMark Wallet**
-- Maintain **RLUSD balance**
-- Purchase listed carbon credit tokens using RLUSD
-- View:
-  - Owned tokens
+- Maintain **XRP balance**
+- Purchase listed carbon credit tokens using **XRP**
+- Account overview:
+  - Owned active tokens
   - Retired (burned) tokens
 - **Carbon Credit Retirement Function**
   - Tokens are transferred to a designated XRPL retirement address
   - Prevents reuse or resale by design
-- **Certificate Mechanism**
-  - Only after retirement can a certificate be issued
-  - Certificate enables further actions (e.g. construction eligibility)
 
 ---
 
-## 📊 Dashboard & Token Information
+## Dashboard & Token Information
 
 ### Lifecycle Dashboard
 - Visualizes the full lifecycle of each carbon credit:
@@ -149,15 +140,15 @@ XRP Ledger (XRPL Testnet)
 
 ---
 
-## 🧪 MVP Scope
+## MVP Scope
 
-For the hackathon MVP, we focus on demonstrating the **full on-chain lifecycle** of carbon credits on XRPL.
+For the hackathon MVP, we focus on demonstrating the **full on-chain lifecycle of carbon credits** on XRPL.
 
 ### Included in MVP
-- Carbon credit issuance (simulated)
-- On-chain trading via XRPL native DEX
-- RLUSD-based settlement
-- Carbon credit retirement (burn / transfer)
+- Multiple Purpose Token issuance
+- XRP-based payment transactions
+- Conditional transaction via escrow
+- Local carbon credit retirement (burn / transfer)
 - Public lifecycle visualization dashboard
 
 ### Out of Scope
@@ -167,34 +158,33 @@ For the hackathon MVP, we focus on demonstrating the **full on-chain lifecycle**
 
 ---
 
-## 🔧 XRPL Features Used (Key Scoring Section)
+## XRPL Features Used (Key Scoring Section)
 
 - **XRPL Accounts** – Separate issuer and buyer accounts with distinct roles  
-- **Issued Assets** – Carbon credits represented as native XRPL tokens  
-- **Transaction Memos** – JSON metadata embedded on-chain  
-- **XRPL Native DEX** – Peer-to-peer trading without intermediaries  
-- **RLUSD** – Stable settlement currency for real-world usage  
+- **Issued MPTokens** – Carbon credits represented as native XRPL tokens  
+- **Transaction Memos** – JSON metadata embedded on-chain
+- **XRPL Escrow** – Conditional XRP settlement requiring issuer approval before asset transfer  
 - **Token Retirement** – Transfer to a designated retirement address to prevent double counting  
 
 ---
 
-## 🔧 XRPL Key Features Used
+## XRPL Key Features Used
 
-CarbonX is built entirely using **XRPL-native primitives**, without relying on smart contracts or off-chain enforcement. The following XRPL features are core to the system design:
+VerdeX is built entirely using **XRPL-native primitives**, without relying on smart contracts or off-chain enforcement. The following XRPL features are core to the system design:
 
-### 1️⃣ XRPL Accounts (Role-Based Architecture)
+### XRPL Accounts (Role-Based Architecture)
 
 We use multiple XRPL accounts with clearly defined roles:
 
 - **Issuer Accounts**: Responsible for minting carbon credit tokens and embedding metadata.
-- **Buyer Accounts**: Hold RLUSD, purchase carbon credits, and trigger retirement.
+- **Buyer Accounts**: Hold XRP, purchase carbon credits, and trigger retirement.
 - **Retirement Address**: A designated, unspendable XRPL address used to permanently retire tokens.
 
 This separation of concerns ensures transparency, security, and clear lifecycle boundaries for each carbon credit.
 
 ---
 
-### 2️⃣ Multi-Purpose Tokens (Issued Assets with Metadata)
+### Multi-Purpose Tokens (Issued Assets with Metadata)
 
 Each carbon credit is represented as a **multi-purpose XRPL issued asset**.
 
@@ -213,20 +203,7 @@ This design allows a single token type to support multiple lifecycle stages: iss
 
 ---
 
-### 3️⃣ XRPL Native DEX (Peer-to-Peer Trading)
-
-Carbon credits can be traded directly on the **XRPL native decentralized exchange (DEX)**.
-
-- Buyers purchase carbon credits using **RLUSD**
-- Orders are settled via XRPL’s orderbook
-- No centralized brokers or intermediaries are required
-- All trades are transparent and publicly verifiable
-
-This enables efficient price discovery and low-cost settlement.
-
----
-
-### 4️⃣ Token Escrow (Conditional Asset Control)
+### Escrow (Conditional Asset Control)
 
 We use **XRPL Escrow transactions** to demonstrate conditional control over carbon credit tokens.
 
@@ -240,17 +217,7 @@ This mechanism showcases how XRPL can support **trust-minimized conditional flow
 
 ---
 
-### 5️⃣ RLUSD Integration (Stable Settlement Asset)
-
-RLUSD is used as the primary settlement currency for carbon credit purchases.
-
-- Provides price stability for real-world use cases
-- Avoids volatility associated with native cryptocurrencies
-- Enables enterprise-friendly accounting and settlement
-
----
-
-### 6️⃣ On-Chain Carbon Credit Retirement
+### On-Chain Carbon Credit Retirement
 
 Carbon credit retirement is triggered explicitly when a buyer redeems a credit.
 
@@ -261,33 +228,24 @@ Carbon credit retirement is triggered explicitly when a buyer redeems a credit.
   - Immutable
   - Verifiable on-chain
 
-Only after the retirement transaction is confirmed does the system issue a **retirement certificate**, ensuring that double counting is prevented by design.
+Retirement transaction is confirmed on-chain and can be verified, ensuring that double counting is prevented by design.
 
 ---
 
+## Demo Video
 
----
-
-## 🎥 Demo Video (≤ 3 Minutes)
-
-📺 **Demo Link**: https://youtube.com/your-demo-link
+**Demo Link**: https://youtube.com/your-demo-link
 
 The demo video includes:
-- CrossMark wallet connection
+- Wallet connection
 - Carbon credit issuance
-- RLUSD-based purchase
+- Carbon credit purchase
 - Carbon credit retirement
 - Dashboard walkthrough
 
 ---
 
-## 🌐 Deployed Application (Optional)
-
-🔗 https://your-app-url.com
-
----
-
-## 📂 Repository Structure
+## Repository Structure
 
 ```text
 .
@@ -298,25 +256,25 @@ The demo video includes:
 └── README.md
 ```
 
-## 🎯 Hackathon Rubric Alignment
+## Hackathon Rubric Alignment
 
 ### Ripple XRPL Challenge
 
-| Criterion | How CarbonX Addresses It |
+| Criterion | How VerdeX Addresses It |
 |--------|---------------------------|
 | Business Potential | Real-world carbon market infrastructure |
 | Creativity | XRPL-native asset lifecycle design |
-| Use of XRPL | Issued assets, DEX, RLUSD, retirement |
+| Use of XRPL | Escrow, MPTokens, retirement |
 | Completeness | Fully testable end-to-end MVP |
 
 ---
 
-## 🌍 BGA Bounty – SDG Alignment
+## BGA Bounty – SDG Alignment
 
 **Primary UN SDG:**  
 - **SDG 13 – Climate Action**
 
-**Why CarbonX Qualifies for BGA:**
+**Why VerdeX Qualifies for BGA:**
 - **Transparency** – Immutable XRPL records prevent fraud  
 - **Traceability** – End-to-end tracking of carbon credits  
 - **Security** – On-chain asset lifecycle eliminates double spending  
@@ -324,7 +282,7 @@ The demo video includes:
 
 ---
 
-## 🏆 BGA Rubric Mapping
+## BGA Rubric Mapping
 
 | Rubric | Explanation |
 |-----|-------------|
@@ -336,8 +294,10 @@ The demo video includes:
 
 ---
 
-## 🧭 Future Roadmap
+## Future Roadmap
 
+- RLUSD integration
+- Transition to Mainnet
 - DID integration for issuer verification  
 - Integration with real carbon registries  
 - Compliance-aware certificate issuance  
@@ -345,7 +305,7 @@ The demo video includes:
 
 ---
 
-## 📬 Contact
+## Contact
 
-📱 **Telegram**: `@your_telegram_handle`  
-📧 **Email**: your@email.com
+**Telegram**: `@beckng`  
+**Email**: e0969877@u.nus.edu
