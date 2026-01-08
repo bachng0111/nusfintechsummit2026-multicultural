@@ -223,6 +223,20 @@ export default function IssuerPage() {
 
       console.log(`[MPT] Created successfully with issuance ID: ${mptIssuanceId}`)
 
+      const tokenData = {
+        issuanceId: mptIssuanceId,
+        address,
+        metadata: mptMetadata,
+        amount,
+        timestamp: new Date().toISOString(),
+        txHash: txHash,
+        explorerUrl: `${DEVNET_EXPLORER_URL}/mpt/${mptIssuanceId}`,
+        ipfsHash,
+      }
+      const existing = JSON.parse(localStorage.getItem('mintedTokens') || '[]')
+      existing.push(tokenData)
+      localStorage.setItem('mintedTokens', JSON.stringify(existing))
+
       setStatus('success')
     } catch (error) {
       console.error('Minting error:', error)
