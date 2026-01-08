@@ -11,16 +11,6 @@ const Header = () => {
           on-chain carbon credits.
         </p>
       </div>
-      <div className="dashboard-header-meta">
-        <div>
-          <span className="dashboard-label">Network</span>
-          <span className="dashboard-value">XRPL Mainnet</span>
-        </div>
-        <div>
-          <span className="dashboard-label">Data</span>
-          <span className="dashboard-value">Mocked for MVP</span>
-        </div>
-      </div>
     </header>
   );
 };
