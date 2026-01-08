@@ -42,10 +42,10 @@ export function XRPLProvider({ children }: { children: ReactNode }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [wallet, setWallet] = useState<xrpl.Wallet | null>(null);
 
-  // account persistence using LocalStorage
+  // account persistence using sessionStorage (per-tab isolation)
   useEffect(() => {
     const restoreWallet = async () => {
-      const savedSeed = localStorage.getItem('xrpl_wallet_seed');
+      const savedSeed = sessionStorage.getItem('xrpl_wallet_seed');
       if (savedSeed) {
         try {
           const restoredWallet = xrpl.Wallet.fromSeed(savedSeed);
@@ -65,7 +65,7 @@ export function XRPLProvider({ children }: { children: ReactNode }) {
 
         } catch (err) {
           console.error('Failed to restore wallet from seed:', err);
-          localStorage.removeItem('xrpl_wallet_seed'); // clean invalid seed
+          sessionStorage.removeItem('xrpl_wallet_seed'); // clean invalid seed
         }
       }
     }
@@ -89,7 +89,7 @@ export function XRPLProvider({ children }: { children: ReactNode }) {
       setSeed(newWallet.seed || null);
 
       if (newWallet.seed) {
-        localStorage.setItem('xrpl_wallet_seed', newWallet.seed);
+        sessionStorage.setItem('xrpl_wallet_seed', newWallet.seed);
       }
 
       // Get balance
@@ -119,7 +119,7 @@ export function XRPLProvider({ children }: { children: ReactNode }) {
       setAddress(existingWallet.address);
       setSeed(existingSeed);
 
-      localStorage.setItem('xrpl_wallet_seed', existingSeed);
+      sessionStorage.setItem('xrpl_wallet_seed', existingSeed);
 
       // Get balance
       try {
@@ -144,7 +144,7 @@ export function XRPLProvider({ children }: { children: ReactNode }) {
     setBalance(null);
     setWallet(null);
 
-    localStorage.removeItem('xrpl_wallet_seed');
+    sessionStorage.removeItem('xrpl_wallet_seed');
   }, []);
 
   // Get a connected client
