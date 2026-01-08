@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useWallet } from '@/components/buyer/BuyerXRPLProvider';
-import { Leaf, Home, ShoppingCart, User, LogOut, Wallet } from 'lucide-react';
+import { Leaf, Home, ShoppingCart, User, LogOut, Wallet, LayoutDashboard } from 'lucide-react';
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -16,6 +16,7 @@ export default function Navbar() {
   const navLinks = [
     { href: '/', label: 'Home', icon: Home },
     { href: '/marketplace', label: 'Marketplace', icon: ShoppingCart },
+    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/buyer/account', label: 'My Account', icon: User, requiresAuth: true },
   ];
 
