@@ -211,7 +211,8 @@ export default function MarketplacePage() {
       );
       setBuyerRequests(updatedRequests);
 
-      // Remove the purchased token from localStorage and update state
+      // Remove the purchased token from marketplace localStorage and update state
+      // Note: The token metadata is preserved in 'allMintedTokensArchive' for buyer's account page
       const storedTokens = localStorage.getItem('mintedTokens');
       if (storedTokens) {
         try {

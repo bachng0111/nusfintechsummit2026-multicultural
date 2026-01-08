@@ -435,9 +435,15 @@ export default function IssuerPage() {
         explorerUrl: `${DEVNET_EXPLORER_URL}/mpt/${mptIssuanceId}`,
         ipfsHash,
       }
+      // Save to marketplace tokens (can be removed after purchase)
       const existing = JSON.parse(localStorage.getItem('mintedTokens') || '[]')
       existing.push(tokenData)
       localStorage.setItem('mintedTokens', JSON.stringify(existing))
+
+      // Save to permanent archive (never removed, used for metadata lookup)
+      const archive = JSON.parse(localStorage.getItem('allMintedTokensArchive') || '[]')
+      archive.push(tokenData)
+      localStorage.setItem('allMintedTokensArchive', JSON.stringify(archive))
 
       setStatus('success')
     } catch (error) {

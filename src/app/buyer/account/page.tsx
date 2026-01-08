@@ -75,9 +75,9 @@ export default function BuyerAccountPage() {
     try {
       client = await getClient();
 
-      // Get all minted tokens from localStorage (for metadata lookup)
-      const mintedTokensRaw = localStorage.getItem('mintedTokens');
-      const mintedTokens: MintedToken[] = mintedTokensRaw ? JSON.parse(mintedTokensRaw) : [];
+      // Get all minted tokens from permanent archive (never removed, for metadata lookup)
+      const archiveRaw = localStorage.getItem('allMintedTokensArchive');
+      const allTokensForLookup: MintedToken[] = archiveRaw ? JSON.parse(archiveRaw) : [];
 
       // Get completed purchase requests for this buyer
       const buyerRequests = getRequestsForBuyer(address);
@@ -102,8 +102,8 @@ export default function BuyerAccountPage() {
       const balances: TokenBalance[] = mptHoldings.map((mpt: any) => {
         const issuanceId = mpt.MPTokenIssuanceID;
         
-        // Find matching minted token for metadata
-        const mintedToken = mintedTokens.find(t => t.issuanceId === issuanceId);
+        // Find matching token for metadata (check purchased tokens first, then minted)
+        const matchedToken = allTokensForLookup.find(t => t.issuanceId === issuanceId);
         
         // Find matching purchase for additional context
         const purchase = completedPurchases.find(p => p.tokenIssuanceId === issuanceId);
@@ -115,23 +115,23 @@ export default function BuyerAccountPage() {
 
         return {
           mptIssuanceId: issuanceId,
-          currency: mintedToken?.metadata?.creditType || 'CARBON',
+          currency: matchedToken?.metadata?.creditType || 'CARBON',
           value: value,
-          issuer: mintedToken?.address || mpt.issuer || 'Unknown',
-          name: mintedToken?.metadata?.projectName || `Carbon Credit ${issuanceId.slice(0, 8)}...`,
-          projectName: mintedToken?.metadata?.projectName,
-          pricePerCredit: mintedToken?.metadata?.pricePerCredit,
-          certification: mintedToken?.metadata?.certification,
-          vintage: mintedToken?.metadata?.vintage,
-          description: mintedToken?.metadata?.description,
-          ipfsHash: mintedToken?.ipfsHash,
-          txHash: purchase?.txHash || mintedToken?.txHash,
+          issuer: matchedToken?.address || mpt.issuer || 'Unknown',
+          name: matchedToken?.metadata?.projectName || `Carbon Credit ${issuanceId.slice(0, 8)}...`,
+          projectName: matchedToken?.metadata?.projectName,
+          pricePerCredit: matchedToken?.metadata?.pricePerCredit,
+          certification: matchedToken?.metadata?.certification,
+          vintage: matchedToken?.metadata?.vintage,
+          description: matchedToken?.metadata?.description,
+          ipfsHash: matchedToken?.ipfsHash,
+          txHash: purchase?.txHash || matchedToken?.txHash,
           purchasedAt: purchase?.createdAt,
           retired: false,
           additional_info: {
             carbon_tons: value,
-            project_name: mintedToken?.metadata?.projectName,
-            standard: mintedToken?.metadata?.certification,
+            project_name: matchedToken?.metadata?.projectName,
+            standard: matchedToken?.metadata?.certification,
           }
         };
       });
@@ -140,27 +140,27 @@ export default function BuyerAccountPage() {
       // (This handles the case where XRPL query doesn't return data yet)
       if (balances.length === 0 && completedPurchases.length > 0) {
         for (const purchase of completedPurchases) {
-          const mintedToken = mintedTokens.find(t => t.issuanceId === purchase.tokenIssuanceId);
+          const matchedToken = allTokensForLookup.find(t => t.issuanceId === purchase.tokenIssuanceId);
           
           balances.push({
             mptIssuanceId: purchase.tokenIssuanceId,
-            currency: mintedToken?.metadata?.creditType || 'CARBON',
+            currency: matchedToken?.metadata?.creditType || 'CARBON',
             value: purchase.tokenAmount.toString(),
             issuer: purchase.issuerAddress,
-            name: mintedToken?.metadata?.projectName || `Carbon Credit`,
-            projectName: mintedToken?.metadata?.projectName,
-            pricePerCredit: mintedToken?.metadata?.pricePerCredit,
-            certification: mintedToken?.metadata?.certification,
-            vintage: mintedToken?.metadata?.vintage,
-            description: mintedToken?.metadata?.description,
-            ipfsHash: mintedToken?.ipfsHash,
+            name: matchedToken?.metadata?.projectName || `Carbon Credit`,
+            projectName: matchedToken?.metadata?.projectName,
+            pricePerCredit: matchedToken?.metadata?.pricePerCredit,
+            certification: matchedToken?.metadata?.certification,
+            vintage: matchedToken?.metadata?.vintage,
+            description: matchedToken?.metadata?.description,
+            ipfsHash: matchedToken?.ipfsHash,
             txHash: purchase.txHash,
             purchasedAt: purchase.createdAt,
             retired: false,
             additional_info: {
               carbon_tons: purchase.tokenAmount.toString(),
-              project_name: mintedToken?.metadata?.projectName,
-              standard: mintedToken?.metadata?.certification,
+              project_name: matchedToken?.metadata?.projectName,
+              standard: matchedToken?.metadata?.certification,
             }
           });
         }
