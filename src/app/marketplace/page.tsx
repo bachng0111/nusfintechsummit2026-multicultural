@@ -9,7 +9,10 @@ import {
   getRequestsForBuyer,
   PurchaseRequest,
   notifyIssuer,
+  updatePurchaseRequest,
+  getCancelAfterTime,
 } from '@/lib/escrow';
+import * as xrpl from 'xrpl';
 
 // Token type matching the issuer's minted token structure
 type MintedToken = {
@@ -60,7 +63,7 @@ export default function MarketplacePage() {
     }
   }, [address]);
 
-  // Poll for escrow status updates
+  // Poll for approval status updates
   useEffect(() => {
     if (!address) return;
     
@@ -68,11 +71,11 @@ export default function MarketplacePage() {
       const requests = getRequestsForBuyer(address);
       setBuyerRequests(requests);
       
-      // Check if any pending request now has escrow created
-      const escrowReady = requests.find(r => r.status === 'escrow_created');
-      if (escrowReady && purchaseStep === 'waiting') {
-        // Auto-trigger payment
-        handleAutoPayment(escrowReady);
+      // Check if any pending request has been approved by issuer
+      const approvedRequest = requests.find(r => r.status === 'approved');
+      if (approvedRequest && purchaseStep === 'waiting') {
+        // Auto-trigger escrow creation by buyer (to send XRP to issuer)
+        handleCreateEscrowAndPay(approvedRequest);
       }
     }, 3000);
 
@@ -137,7 +140,8 @@ export default function MarketplacePage() {
     }
   };
 
-  const handleAutoPayment = async (request: PurchaseRequest) => {
+  // Handle creating escrow (buyer sends XRP to issuer) after issuer approves
+  const handleCreateEscrowAndPay = async (request: PurchaseRequest) => {
     if (!address || purchaseStep === 'paying') return;
     
     setPurchaseStep('paying');
@@ -149,48 +153,65 @@ export default function MarketplacePage() {
       const wallet = getWallet();
       if (!wallet) throw new Error('Wallet not available');
 
-      // If escrow has condition/fulfillment, we need to finish the escrow
-      // For now, we'll do a simple payment (escrow finish would be more complex)
-      if (request.escrowSequence && request.escrowFulfillment) {
-        // Finish the escrow with the fulfillment
-        const escrowFinish = {
-          TransactionType: 'EscrowFinish' as const,
-          Account: address,
-          Owner: request.issuerAddress,
-          OfferSequence: request.escrowSequence,
-          Condition: request.escrowCondition,
-          Fulfillment: request.escrowFulfillment,
-        };
+      // Create escrow from BUYER to ISSUER (buyer sends XRP payment)
+      // The issuer will use the fulfillment to finish the escrow and receive the XRP
+      const escrowCreate = {
+        TransactionType: 'EscrowCreate' as const,
+        Account: address, // Buyer is the source
+        Destination: request.issuerAddress, // Issuer receives the XRP
+        Amount: xrpl.xrpToDrops(request.priceXRP),
+        Condition: request.escrowCondition, // Condition from issuer's approval
+        CancelAfter: getCancelAfterTime(1), // 1 hour expiry
+      };
 
-        const prepared = await client.autofill(escrowFinish);
-        const signed = wallet.sign(prepared);
-        const result = await client.submitAndWait(signed.tx_blob);
-        
-        console.log('Escrow finish result:', result);
-      } else {
-        // Fallback: Direct XRP payment
-        const payment = {
-          TransactionType: 'Payment' as const,
-          Account: address,
-          Destination: request.issuerAddress,
-          Amount: (request.priceXRP * 1_000_000).toString(),
-        };
+      console.log('[Buyer Escrow] Creating escrow to pay issuer:', escrowCreate);
 
-        const prepared = await client.autofill(payment);
-        const signed = wallet.sign(prepared);
-        const result = await client.submitAndWait(signed.tx_blob);
+      const prepared = await client.autofill(escrowCreate);
+      const signed = wallet.sign(prepared);
+      const result = await client.submitAndWait(signed.tx_blob);
 
-        console.log('Payment result:', result);
+      console.log('[Buyer Escrow] Result:', result);
+
+      const txResult = (result.result.meta as { TransactionResult?: string })?.TransactionResult;
+      if (txResult !== 'tesSUCCESS') {
+        throw new Error(`Escrow creation failed: ${txResult}`);
       }
+
+      // Get the escrow sequence
+      const escrowSequence = (prepared as { Sequence?: number }).Sequence || 0;
+
+      // Update the request with escrow info so issuer can finish it
+      updatePurchaseRequest(request.id, {
+        status: 'escrow_created',
+        escrowSequence,
+        txHash: result.result.hash,
+      });
+
+      // Also authorize the MPT token so issuer can send tokens to buyer
+      // Buyer needs to authorize before receiving MPT tokens
+      const mptAuthorize = {
+        TransactionType: 'MPTokenAuthorize' as const,
+        Account: address,
+        MPTokenIssuanceID: request.tokenIssuanceId,
+      };
+
+      console.log('[MPT] Authorizing token to receive:', mptAuthorize);
+
+      const preparedAuth = await client.autofill(mptAuthorize);
+      const signedAuth = wallet.sign(preparedAuth);
+      const authResult = await client.submitAndWait(signedAuth.tx_blob);
+
+      console.log('[MPT] Authorization result:', authResult);
 
       setPurchaseStep('done');
       
       // Update request status locally
       const updatedRequests = buyerRequests.map(r =>
-        r.id === request.id ? { ...r, status: 'completed' as const } : r
+        r.id === request.id ? { ...r, status: 'escrow_created' as const } : r
       );
       setBuyerRequests(updatedRequests);
 
+      alert('Payment escrow created! The issuer will now complete the transaction and send you the tokens.');
     } catch (err) {
       console.error('Payment failed:', err);
       alert('Payment failed. Check console for details.');

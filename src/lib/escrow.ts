@@ -22,7 +22,7 @@ export interface PurchaseRequest {
   tokenAmount: number;
   priceXRP: number;
   issuerAddress: string;
-  status: 'pending' | 'escrow_created' | 'paid' | 'completed' | 'cancelled';
+  status: 'pending' | 'approved' | 'escrow_created' | 'paid' | 'completed' | 'cancelled';
   createdAt: string;
   escrowSequence?: number;
   escrowCondition?: string;
@@ -136,11 +136,12 @@ export function updatePurchaseRequest(id: string, updates: Partial<PurchaseReque
 }
 
 /**
- * Get pending requests for an issuer
+ * Get pending requests for an issuer (pending, approved, or escrow_created)
  */
 export function getPendingRequestsForIssuer(issuerAddress: string): PurchaseRequest[] {
   return getPurchaseRequests().filter(
-    r => r.issuerAddress === issuerAddress && r.status === 'pending'
+    r => r.issuerAddress === issuerAddress && 
+    (r.status === 'pending' || r.status === 'approved' || r.status === 'escrow_created')
   );
 }
 

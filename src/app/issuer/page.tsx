@@ -181,7 +181,8 @@ export default function IssuerPage() {
     return () => clearInterval(interval)
   }, [address])
 
-  // Handle approving a purchase request by creating an escrow
+  // Handle approving a purchase request
+  // Flow: Issuer approves -> generates condition/fulfillment -> Buyer creates escrow to send XRP to Issuer
   const handleApprovePurchaseRequest = useCallback(async (request: PurchaseRequest) => {
     if (!isConnected || !address) {
       alert('Please connect your wallet first')
@@ -196,63 +197,120 @@ export default function IssuerPage() {
 
     setProcessingRequest(request.id)
 
-    let client: xrpl.Client | null = null
-
     try {
-      client = await getClient()
-
       // Generate crypto-condition for the escrow
+      // The buyer will use this condition when creating the escrow
+      // The issuer will use the fulfillment to finish the escrow and receive payment
       const { condition, fulfillment } = generateCryptoCondition()
 
-      // For token escrow, we would create a TokenEscrow
-      // But since issuer cannot be source, we'll simulate with XRP escrow for demo
-      // In production, tokens would be transferred to a treasury first
-      
-      // Create an EscrowCreate transaction
-      // Note: This demo uses XRP escrow; real implementation would need MPT escrow
-      const escrowCreate = {
-        TransactionType: 'EscrowCreate' as const,
-        Account: address,
-        Destination: request.buyerAddress,
-        Amount: xrpl.xrpToDrops(request.priceXRP), // For demo, escrowing XRP equivalent
-        Condition: condition,
-        CancelAfter: getCancelAfterTime(1), // 1 hour expiry
-        FinishAfter: getCancelAfterTime(0), // Can be finished immediately
-      }
-
-      console.log('[Escrow] Creating escrow:', escrowCreate)
-
-      const prepared = await client.autofill(escrowCreate)
-      const signed = wallet.sign(prepared)
-      const submitResponse = await client.submitAndWait(signed.tx_blob)
-
-      console.log('[Escrow] Submit response:', submitResponse)
-
-      const txResult = (submitResponse.result.meta as { TransactionResult?: string })?.TransactionResult
-      if (txResult !== 'tesSUCCESS') {
-        throw new Error(`Transaction failed with result: ${txResult}`)
-      }
-
-      // Get the escrow sequence from the transaction
-      const escrowSequence = (prepared as any).Sequence || 0
-
-      // Update the purchase request with escrow info
+      // Update the purchase request with approval info
+      // The buyer will detect this and create an escrow to send XRP to issuer
       updatePurchaseRequest(request.id, {
-        status: 'escrow_created',
-        escrowSequence,
+        status: 'approved',
         escrowCondition: condition,
-        escrowFulfillment: fulfillment, // Buyer will need this to complete
-        txHash: submitResponse.result.hash,
+        escrowFulfillment: fulfillment, // Issuer keeps this to finish escrow and get paid
       })
 
       // Refresh requests
       const updatedRequests = getPendingRequestsForIssuer(address)
       setPurchaseRequests(updatedRequests)
 
-      alert(`Escrow created successfully! The buyer can now complete the purchase.`)
+      alert(`Request approved! Waiting for buyer to create escrow and send payment.`)
     } catch (error) {
-      console.error('Failed to create escrow:', error)
-      alert(`Failed to create escrow: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      console.error('Failed to approve request:', error)
+      alert(`Failed to approve request: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setProcessingRequest(null)
+    }
+  }, [isConnected, address, getWallet])
+
+  // Handle completing the purchase: finish escrow to receive XRP + transfer tokens to buyer
+  const handleCompletePurchase = useCallback(async (request: PurchaseRequest) => {
+    if (!isConnected || !address) {
+      alert('Please connect your wallet first')
+      return
+    }
+
+    const wallet = getWallet()
+    if (!wallet) {
+      alert('Wallet not available')
+      return
+    }
+
+    if (!request.escrowSequence || !request.escrowFulfillment) {
+      alert('Escrow information missing')
+      return
+    }
+
+    setProcessingRequest(request.id)
+    let client: xrpl.Client | null = null
+
+    try {
+      client = await getClient()
+
+      // Step 1: Finish the escrow to receive XRP payment from buyer
+      const escrowFinish = {
+        TransactionType: 'EscrowFinish' as const,
+        Account: address,
+        Owner: request.buyerAddress, // Buyer owns the escrow
+        OfferSequence: request.escrowSequence,
+        Condition: request.escrowCondition,
+        Fulfillment: request.escrowFulfillment,
+      }
+
+      console.log('[Escrow] Finishing escrow to receive payment:', escrowFinish)
+
+      const preparedFinish = await client.autofill(escrowFinish)
+      const signedFinish = wallet.sign(preparedFinish)
+      const finishResponse = await client.submitAndWait(signedFinish.tx_blob)
+
+      console.log('[Escrow] Finish response:', finishResponse)
+
+      const finishResult = (finishResponse.result.meta as { TransactionResult?: string })?.TransactionResult
+      if (finishResult !== 'tesSUCCESS') {
+        throw new Error(`Escrow finish failed: ${finishResult}`)
+      }
+
+      // Step 2: Transfer MPT tokens to buyer
+      // First, buyer needs to authorize the token (done on their side)
+      // Then issuer sends the tokens via MPTokenPayment
+      const mptPayment = {
+        TransactionType: 'Payment' as const,
+        Account: address,
+        Destination: request.buyerAddress,
+        Amount: {
+          mpt_issuance_id: request.tokenIssuanceId,
+          value: (request.tokenAmount * 100).toString(), // Convert to smallest unit (AssetScale: 2)
+        },
+      }
+
+      console.log('[MPT] Transferring tokens to buyer:', mptPayment)
+
+      const preparedPayment = await client.autofill(mptPayment)
+      const signedPayment = wallet.sign(preparedPayment)
+      const paymentResponse = await client.submitAndWait(signedPayment.tx_blob)
+
+      console.log('[MPT] Payment response:', paymentResponse)
+
+      const paymentResult = (paymentResponse.result.meta as { TransactionResult?: string })?.TransactionResult
+      if (paymentResult !== 'tesSUCCESS') {
+        throw new Error(`Token transfer failed: ${paymentResult}`)
+      }
+
+      // Update the purchase request as completed
+      updatePurchaseRequest(request.id, {
+        status: 'completed',
+        txHash: paymentResponse.result.hash,
+      })
+
+      // Refresh requests
+      const updatedRequests = getPendingRequestsForIssuer(address)
+      setPurchaseRequests(updatedRequests)
+
+      alert(`Purchase completed! XRP received and tokens transferred to buyer.`)
+    } catch (error) {
+      console.error('Failed to complete purchase:', error)
+      alert(`Failed to complete purchase: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setProcessingRequest(null)
       if (client) {
@@ -531,12 +589,15 @@ export default function IssuerPage() {
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                             request.status === 'pending'
                               ? 'bg-yellow-100 text-yellow-700'
+                              : request.status === 'approved'
+                              ? 'bg-purple-100 text-purple-700'
                               : request.status === 'escrow_created'
                               ? 'bg-blue-100 text-blue-700'
                               : 'bg-green-100 text-green-700'
                           }`}>
                             {request.status === 'pending' && '⏳ Pending Approval'}
-                            {request.status === 'escrow_created' && '🔐 Escrow Created'}
+                            {request.status === 'approved' && '✅ Approved - Waiting for Buyer'}
+                            {request.status === 'escrow_created' && '💰 Escrow Ready - Complete Purchase'}
                             {request.status === 'completed' && '✅ Completed'}
                           </span>
                         </div>
@@ -581,10 +642,30 @@ export default function IssuerPage() {
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                               </svg>
-                              Creating Escrow...
+                              Approving...
                             </>
                           ) : (
-                            '✓ Approve & Create Escrow'
+                            '✓ Approve Request'
+                          )}
+                        </button>
+                      )}
+
+                      {request.status === 'escrow_created' && (
+                        <button
+                          onClick={() => handleCompletePurchase(request)}
+                          disabled={processingRequest === request.id}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                          {processingRequest === request.id ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Completing...
+                            </>
+                          ) : (
+                            '💰 Complete & Send Tokens'
                           )}
                         </button>
                       )}
@@ -595,12 +676,12 @@ export default function IssuerPage() {
             )}
 
             <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-100">
-              <h3 className="font-medium text-blue-800 mb-2">ℹ️ How Escrow Works</h3>
+              <h3 className="font-medium text-blue-800 mb-2">ℹ️ How the Purchase Flow Works</h3>
               <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
                 <li>Buyer sends a purchase request with their wallet address</li>
-                <li>You approve the request to create a secure escrow</li>
-                <li>Buyer&apos;s payment is automatically processed</li>
-                <li>Tokens are transferred upon escrow completion</li>
+                <li>You approve the request (generates escrow condition)</li>
+                <li>Buyer creates an escrow to send XRP payment to you</li>
+                <li>You click &quot;Complete&quot; to receive XRP and send tokens to buyer</li>
               </ol>
             </div>
           </div>
