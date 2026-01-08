@@ -1,8 +1,15 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useWallet } from '@/components/buyer/BuyerXRPLProvider'
 import * as xrpl from 'xrpl'
+import {
+  getPendingRequestsForIssuer,
+  updatePurchaseRequest,
+  generateCryptoCondition,
+  getCancelAfterTime,
+  PurchaseRequest,
+} from '@/lib/escrow'
 // XRPL Devnet configuration
 const DEVNET_EXPLORER_URL = 'https://devnet.xrpl.org'
 
@@ -146,13 +153,113 @@ export default function IssuerPage() {
   const [tokenTicker, setTokenTicker] = useState('')
   const [amount, setAmount] = useState('')
   const [pdfFile, setPdfFile] = useState<File | null>(null)
+  const [pricePerCredit, setPricePerCredit] = useState('')
 
   // Transaction state
   const [status, setStatus] = useState<MintStatus>('idle')
   const [result, setResult] = useState<MintResult>({})
 
+  // Purchase requests state
+  const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>([])
+  const [processingRequest, setProcessingRequest] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'issue' | 'requests'>('issue')
+
   // Get wallet from our XRPLProvider
   const { address, isConnected, getClient, getWallet } = useWallet()
+
+  // Poll for purchase requests
+  useEffect(() => {
+    if (!address) return
+
+    const loadRequests = () => {
+      const requests = getPendingRequestsForIssuer(address)
+      setPurchaseRequests(requests)
+    }
+
+    loadRequests()
+    const interval = setInterval(loadRequests, 3000)
+    return () => clearInterval(interval)
+  }, [address])
+
+  // Handle approving a purchase request by creating an escrow
+  const handleApprovePurchaseRequest = useCallback(async (request: PurchaseRequest) => {
+    if (!isConnected || !address) {
+      alert('Please connect your wallet first')
+      return
+    }
+
+    const wallet = getWallet()
+    if (!wallet) {
+      alert('Wallet not available')
+      return
+    }
+
+    setProcessingRequest(request.id)
+
+    let client: xrpl.Client | null = null
+
+    try {
+      client = await getClient()
+
+      // Generate crypto-condition for the escrow
+      const { condition, fulfillment } = generateCryptoCondition()
+
+      // For token escrow, we would create a TokenEscrow
+      // But since issuer cannot be source, we'll simulate with XRP escrow for demo
+      // In production, tokens would be transferred to a treasury first
+      
+      // Create an EscrowCreate transaction
+      // Note: This demo uses XRP escrow; real implementation would need MPT escrow
+      const escrowCreate = {
+        TransactionType: 'EscrowCreate' as const,
+        Account: address,
+        Destination: request.buyerAddress,
+        Amount: xrpl.xrpToDrops(request.priceXRP), // For demo, escrowing XRP equivalent
+        Condition: condition,
+        CancelAfter: getCancelAfterTime(1), // 1 hour expiry
+        FinishAfter: getCancelAfterTime(0), // Can be finished immediately
+      }
+
+      console.log('[Escrow] Creating escrow:', escrowCreate)
+
+      const prepared = await client.autofill(escrowCreate)
+      const signed = wallet.sign(prepared)
+      const submitResponse = await client.submitAndWait(signed.tx_blob)
+
+      console.log('[Escrow] Submit response:', submitResponse)
+
+      const txResult = (submitResponse.result.meta as { TransactionResult?: string })?.TransactionResult
+      if (txResult !== 'tesSUCCESS') {
+        throw new Error(`Transaction failed with result: ${txResult}`)
+      }
+
+      // Get the escrow sequence from the transaction
+      const escrowSequence = (prepared as any).Sequence || 0
+
+      // Update the purchase request with escrow info
+      updatePurchaseRequest(request.id, {
+        status: 'escrow_created',
+        escrowSequence,
+        escrowCondition: condition,
+        escrowFulfillment: fulfillment, // Buyer will need this to complete
+        txHash: submitResponse.result.hash,
+      })
+
+      // Refresh requests
+      const updatedRequests = getPendingRequestsForIssuer(address)
+      setPurchaseRequests(updatedRequests)
+
+      alert(`Escrow created successfully! The buyer can now complete the purchase.`)
+    } catch (error) {
+      console.error('Failed to create escrow:', error)
+      alert(`Failed to create escrow: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setProcessingRequest(null)
+      if (client) {
+        await client.disconnect()
+      }
+    }
+  }, [isConnected, address, getClient, getWallet])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -175,7 +282,7 @@ export default function IssuerPage() {
       return
     }
 
-    if (!projectName || !tokenTicker || !amount || !pdfFile) {
+    if (!projectName || !tokenTicker || !amount || !pdfFile || !pricePerCredit) {
       alert('Please fill in all fields and upload a PDF')
       return
     }
@@ -183,6 +290,12 @@ export default function IssuerPage() {
     const mintAmount = parseFloat(amount)
     if (isNaN(mintAmount) || mintAmount <= 0) {
       alert('Please enter a valid amount')
+      return
+    }
+
+    const price = parseFloat(pricePerCredit)
+    if (isNaN(price) || price <= 0) {
+      alert('Please enter a valid price per credit')
       return
     }
 
@@ -232,11 +345,23 @@ export default function IssuerPage() {
         additional_info: {
           carbon_tons: amount,
           project_name: projectName,
+          price_per_credit: pricePerCredit,
           verification_date: new Date().toISOString().split('T')[0],
           standard: 'VCS',
           methodology: 'VM0007',
           registry: 'Verra'
         }
+      }
+
+      // Create marketplace-friendly metadata
+      const marketplaceMetadata = {
+        projectName,
+        creditType: 'Carbon Offset',
+        vintage: new Date().getFullYear().toString(),
+        certification: 'VCS',
+        location: 'Global',
+        description: `Carbon credit token for ${projectName}. Audit report available via IPFS.`,
+        pricePerCredit,
       }
 
       // Encode metadata to hex
@@ -295,8 +420,8 @@ export default function IssuerPage() {
       const tokenData = {
         issuanceId: mptIssuanceId,
         address,
-        metadata: mptMetadata,
-        amount,
+        metadata: marketplaceMetadata,
+        amount: mintAmount,
         timestamp: new Date().toISOString(),
         txHash: txHash,
         explorerUrl: `${DEVNET_EXPLORER_URL}/mpt/${mptIssuanceId}`,
@@ -319,12 +444,13 @@ export default function IssuerPage() {
         await client.disconnect()
       }
     }
-  }, [isConnected, address, getClient, getWallet, projectName, tokenTicker, amount, pdfFile])
+  }, [isConnected, address, getClient, getWallet, projectName, tokenTicker, amount, pdfFile, pricePerCredit])
 
   const resetForm = () => {
     setProjectName('')
     setTokenTicker('')
     setAmount('')
+    setPricePerCredit('')
     setPdfFile(null)
     setStatus('idle')
     setResult({})
@@ -333,7 +459,7 @@ export default function IssuerPage() {
   return (
     <main className="min-h-screen p-8">
       {/* Header */}
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-3xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-carbon-800">🌿 CarbonLedger</h1>
@@ -342,7 +468,146 @@ export default function IssuerPage() {
           <WalletConnectButton />
         </div>
 
-        {/* Main Card */}
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setActiveTab('issue')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeTab === 'issue'
+                ? 'bg-green-600 text-white'
+                : 'bg-white text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            🌱 Issue Token
+          </button>
+          <button
+            onClick={() => setActiveTab('requests')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors relative ${
+              activeTab === 'requests'
+                ? 'bg-green-600 text-white'
+                : 'bg-white text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            📋 Purchase Requests
+            {purchaseRequests.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                {purchaseRequests.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Purchase Requests Tab */}
+        {activeTab === 'requests' && (
+          <div className="bg-white rounded-2xl shadow-xl p-8">
+            <h2 className="text-xl font-semibold text-gray-800 mb-6">
+              Incoming Purchase Requests
+            </h2>
+
+            {!isConnected ? (
+              <p className="text-gray-500 text-center py-8">
+                Connect your wallet to view purchase requests
+              </p>
+            ) : purchaseRequests.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-3xl">📭</span>
+                </div>
+                <p className="text-gray-500">No pending purchase requests</p>
+                <p className="text-sm text-gray-400 mt-2">
+                  Requests from buyers will appear here
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {purchaseRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    className="border border-gray-200 rounded-xl p-4 hover:border-green-300 transition-colors"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            request.status === 'pending'
+                              ? 'bg-yellow-100 text-yellow-700'
+                              : request.status === 'escrow_created'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-green-100 text-green-700'
+                          }`}>
+                            {request.status === 'pending' && '⏳ Pending Approval'}
+                            {request.status === 'escrow_created' && '🔐 Escrow Created'}
+                            {request.status === 'completed' && '✅ Completed'}
+                          </span>
+                        </div>
+                        
+                        <p className="text-sm text-gray-600 mb-1">
+                          <span className="font-medium">Buyer:</span>{' '}
+                          <code className="bg-gray-100 px-1 rounded">
+                            {request.buyerAddress.slice(0, 8)}...{request.buyerAddress.slice(-6)}
+                          </code>
+                        </p>
+                        
+                        <p className="text-sm text-gray-600 mb-1">
+                          <span className="font-medium">Token ID:</span>{' '}
+                          <code className="bg-gray-100 px-1 rounded">
+                            {request.tokenIssuanceId?.slice(0, 12)}...
+                          </code>
+                        </p>
+
+                        <div className="flex gap-4 mt-2 text-sm">
+                          <span className="text-gray-600">
+                            <span className="font-medium">Amount:</span> {request.tokenAmount} credits
+                          </span>
+                          <span className="text-green-600 font-medium">
+                            {request.priceXRP} XRP
+                          </span>
+                        </div>
+
+                        <p className="text-xs text-gray-400 mt-2">
+                          {new Date(request.createdAt).toLocaleString()}
+                        </p>
+                      </div>
+
+                      {request.status === 'pending' && (
+                        <button
+                          onClick={() => handleApprovePurchaseRequest(request)}
+                          disabled={processingRequest === request.id}
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                          {processingRequest === request.id ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Creating Escrow...
+                            </>
+                          ) : (
+                            '✓ Approve & Create Escrow'
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-100">
+              <h3 className="font-medium text-blue-800 mb-2">ℹ️ How Escrow Works</h3>
+              <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
+                <li>Buyer sends a purchase request with their wallet address</li>
+                <li>You approve the request to create a secure escrow</li>
+                <li>Buyer&apos;s payment is automatically processed</li>
+                <li>Tokens are transferred upon escrow completion</li>
+              </ol>
+            </div>
+          </div>
+        )}
+
+        {/* Issue Token Tab */}
+        {activeTab === 'issue' && (
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <h2 className="text-xl font-semibold text-gray-800 mb-6">
             Issue Carbon Credits (MPT)
@@ -398,6 +663,26 @@ export default function IssuerPage() {
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-carbon-500 focus:border-transparent transition-all"
                 disabled={status !== 'idle'}
               />
+            </div>
+
+            {/* Price per Credit */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Price per Credit (XRP)
+              </label>
+              <input
+                type="number"
+                value={pricePerCredit}
+                onChange={(e) => setPricePerCredit(e.target.value)}
+                placeholder="e.g., 10"
+                min="0.000001"
+                step="0.000001"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-carbon-500 focus:border-transparent transition-all"
+                disabled={status !== 'idle'}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Set the XRP price for each carbon credit
+              </p>
             </div>
 
             {/* PDF Upload */}
@@ -613,6 +898,7 @@ export default function IssuerPage() {
             </p>
           </div>
         </div>
+        )}
 
         {/* Footer */}
         <p className="text-center text-sm text-gray-500 mt-8">

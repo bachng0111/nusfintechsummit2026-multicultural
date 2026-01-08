@@ -3,8 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { useWallet } from '@/components/buyer/BuyerXRPLProvider';
 import { useRouter } from 'next/navigation';
-import { Payment } from 'xrpl';
-import { Leaf, ExternalLink, Calendar, Hash, Coins, Clock, ShoppingCart, X } from 'lucide-react';
+import { Leaf, ExternalLink, Calendar, Hash, Coins, Clock, ShoppingCart, X, CheckCircle, Loader2 } from 'lucide-react';
+import {
+  createPurchaseRequest,
+  getRequestsForBuyer,
+  PurchaseRequest,
+  notifyIssuer,
+} from '@/lib/escrow';
 
 // Token type matching the issuer's minted token structure
 type MintedToken = {
@@ -33,6 +38,8 @@ export default function MarketplacePage() {
   const [tokens, setTokens] = useState<MintedToken[]>([]);
   const [selectedToken, setSelectedToken] = useState<MintedToken | null>(null);
   const [buying, setBuying] = useState(false);
+  const [buyerRequests, setBuyerRequests] = useState<PurchaseRequest[]>([]);
+  const [purchaseStep, setPurchaseStep] = useState<'confirm' | 'waiting' | 'paying' | 'done'>('confirm');
 
   // Load minted tokens from localStorage
   useEffect(() => {
@@ -45,6 +52,32 @@ export default function MarketplacePage() {
       }
     }
   }, []);
+
+  // Load buyer's purchase requests
+  useEffect(() => {
+    if (address) {
+      setBuyerRequests(getRequestsForBuyer(address));
+    }
+  }, [address]);
+
+  // Poll for escrow status updates
+  useEffect(() => {
+    if (!address) return;
+    
+    const interval = setInterval(() => {
+      const requests = getRequestsForBuyer(address);
+      setBuyerRequests(requests);
+      
+      // Check if any pending request now has escrow created
+      const escrowReady = requests.find(r => r.status === 'escrow_created');
+      if (escrowReady && purchaseStep === 'waiting') {
+        // Auto-trigger payment
+        handleAutoPayment(escrowReady);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [address, purchaseStep]);
 
   const handleTokenPurchase = (token: MintedToken) => {
     if (!isConnected) {
@@ -59,6 +92,7 @@ export default function MarketplacePage() {
       return;
     }
     setSelectedToken(token);
+    setPurchaseStep('confirm');
   };
 
   const handleConfirmPurchase = async (token: MintedToken) => {
@@ -70,35 +104,106 @@ export default function MarketplacePage() {
     setBuying(true);
 
     try {
+      const pricePerCredit = parseFloat(token.metadata?.pricePerCredit || '10');
+      const totalPrice = pricePerCredit * token.amount;
+
+      // Create a purchase request instead of direct payment
+      const request = createPurchaseRequest(
+        address,
+        token.issuanceId,
+        token.amount,
+        totalPrice,
+        token.address
+      );
+
+      // Notify the issuer about the purchase request
+      notifyIssuer(token.address, 'New purchase request', {
+        requestId: request.id,
+        buyerAddress: address,
+        tokenIssuanceId: token.issuanceId,
+        amount: token.amount,
+        priceXRP: totalPrice,
+      });
+
+      console.log('Purchase request created:', request);
+      setBuyerRequests(prev => [...prev, request]);
+      
+      // Move to waiting step
+      setPurchaseStep('waiting');
+    } catch (err) {
+      console.error('Failed to create purchase request:', err);
+      alert('Failed to create purchase request. Check console for details.');
+      setBuying(false);
+    }
+  };
+
+  const handleAutoPayment = async (request: PurchaseRequest) => {
+    if (!address || purchaseStep === 'paying') return;
+    
+    setPurchaseStep('paying');
+
+    try {
       const client = await getClient();
       if (!client) throw new Error('XRPL client not available');
 
       const wallet = getWallet();
       if (!wallet) throw new Error('Wallet not available');
 
-      const issuerAddress = token.address; // Use the token issuer's address
+      // If escrow has condition/fulfillment, we need to finish the escrow
+      // For now, we'll do a simple payment (escrow finish would be more complex)
+      if (request.escrowSequence && request.escrowFulfillment) {
+        // Finish the escrow with the fulfillment
+        const escrowFinish = {
+          TransactionType: 'EscrowFinish' as const,
+          Account: address,
+          Owner: request.issuerAddress,
+          OfferSequence: request.escrowSequence,
+          Condition: request.escrowCondition,
+          Fulfillment: request.escrowFulfillment,
+        };
 
-      const pricePerCredit = parseFloat(token.metadata?.pricePerCredit || '10');
-      const totalPrice = pricePerCredit * token.amount;
+        const prepared = await client.autofill(escrowFinish);
+        const signed = wallet.sign(prepared);
+        const result = await client.submitAndWait(signed.tx_blob);
+        
+        console.log('Escrow finish result:', result);
+      } else {
+        // Fallback: Direct XRP payment
+        const payment = {
+          TransactionType: 'Payment' as const,
+          Account: address,
+          Destination: request.issuerAddress,
+          Amount: (request.priceXRP * 1_000_000).toString(),
+        };
 
-      const payment: Payment = {
-        TransactionType: 'Payment',
-        Account: address,
-        Destination: issuerAddress,
-        Amount: (totalPrice * 1_000_000).toString(), // XRP in drops
-      };
+        const prepared = await client.autofill(payment);
+        const signed = wallet.sign(prepared);
+        const result = await client.submitAndWait(signed.tx_blob);
 
-      const result = await client.submitAndWait(payment, { wallet });
+        console.log('Payment result:', result);
+      }
 
-      console.log('Purchase successful:', result);
-      alert(`Successfully purchased ${token.metadata?.projectName || 'Carbon Credit'}!`);
-      setSelectedToken(null);
+      setPurchaseStep('done');
+      
+      // Update request status locally
+      const updatedRequests = buyerRequests.map(r =>
+        r.id === request.id ? { ...r, status: 'completed' as const } : r
+      );
+      setBuyerRequests(updatedRequests);
+
     } catch (err) {
-      console.error('Purchase failed:', err);
-      alert('Purchase failed. Check console for details.');
+      console.error('Payment failed:', err);
+      alert('Payment failed. Check console for details.');
+      setPurchaseStep('confirm');
     } finally {
       setBuying(false);
     }
+  };
+
+  const handleCloseModal = () => {
+    setSelectedToken(null);
+    setPurchaseStep('confirm');
+    setBuying(false);
   };
 
   const formatDate = (timestamp: string) => {
@@ -136,69 +241,148 @@ export default function MarketplacePage() {
         <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50 p-4">
           <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-gray-900">Confirm Purchase</h3>
+              <h3 className="text-xl font-bold text-gray-900">
+                {purchaseStep === 'confirm' && 'Confirm Purchase'}
+                {purchaseStep === 'waiting' && 'Waiting for Issuer'}
+                {purchaseStep === 'paying' && 'Processing Payment'}
+                {purchaseStep === 'done' && 'Purchase Complete!'}
+              </h3>
               <button
-                onClick={() => setSelectedToken(null)}
+                onClick={handleCloseModal}
                 className="p-1 hover:bg-gray-100 rounded-full transition-colors"
               >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
 
-            <div className="bg-green-50 rounded-xl p-4 mb-4">
-              <h4 className="font-semibold text-green-800 mb-2">
-                {selectedToken.metadata?.projectName || 'Carbon Credit'}
-              </h4>
-              <p className="text-sm text-green-700 mb-3">
-                {selectedToken.metadata?.description || 'Verified carbon offset credit'}
-              </p>
-              
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="flex items-center gap-1 text-green-600">
-                  <Coins className="w-4 h-4" />
-                  <span>Amount: {selectedToken.amount} credits</span>
-                </div>
-                <div className="flex items-center gap-1 text-green-600">
-                  <Calendar className="w-4 h-4" />
-                  <span>Vintage: {selectedToken.metadata?.vintage || 'N/A'}</span>
-                </div>
-              </div>
+            {/* Progress Steps */}
+            <div className="flex items-center justify-between mb-6">
+              {['Request', 'Escrow', 'Payment', 'Complete'].map((step, idx) => {
+                const stepStates = { confirm: 0, waiting: 1, paying: 2, done: 3 };
+                const currentStep = stepStates[purchaseStep];
+                const isActive = idx <= currentStep;
+                const isCurrent = idx === currentStep;
+                
+                return (
+                  <React.Fragment key={step}>
+                    <div className="flex flex-col items-center">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
+                        isActive ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-500'
+                      } ${isCurrent ? 'ring-2 ring-green-300' : ''}`}>
+                        {isActive && idx < currentStep ? (
+                          <CheckCircle className="w-5 h-5" />
+                        ) : (
+                          idx + 1
+                        )}
+                      </div>
+                      <span className={`text-xs mt-1 ${isActive ? 'text-green-600' : 'text-gray-400'}`}>
+                        {step}
+                      </span>
+                    </div>
+                    {idx < 3 && (
+                      <div className={`flex-1 h-0.5 mx-2 ${idx < currentStep ? 'bg-green-600' : 'bg-gray-200'}`} />
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </div>
 
-            <div className="border-t border-gray-100 pt-4 mb-4">
-              <div className="flex justify-between items-center text-lg">
-                <span className="text-gray-600">Total Price:</span>
-                <span className="font-bold text-green-600">
-                  {(parseFloat(selectedToken.metadata?.pricePerCredit || '10') * selectedToken.amount).toFixed(2)} XRP
-                </span>
-              </div>
-            </div>
+            {/* Step Content */}
+            {purchaseStep === 'confirm' && (
+              <>
+                <div className="bg-green-50 rounded-xl p-4 mb-4">
+                  <h4 className="font-semibold text-green-800 mb-2">
+                    {selectedToken.metadata?.projectName || 'Carbon Credit'}
+                  </h4>
+                  <p className="text-sm text-green-700 mb-3">
+                    {selectedToken.metadata?.description || 'Verified carbon offset credit'}
+                  </p>
+                  
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="flex items-center gap-1 text-green-600">
+                      <Coins className="w-4 h-4" />
+                      <span>Amount: {selectedToken.amount} credits</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-green-600">
+                      <Calendar className="w-4 h-4" />
+                      <span>Vintage: {selectedToken.metadata?.vintage || 'N/A'}</span>
+                    </div>
+                  </div>
+                </div>
 
-            <div className="flex gap-3">
-              <button
-                onClick={() => setSelectedToken(null)}
-                className="flex-1 px-4 py-3 border border-gray-200 rounded-xl hover:bg-gray-50 font-medium transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleConfirmPurchase(selectedToken)}
-                disabled={buying}
-                className="flex-1 px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {buying ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
+                <div className="border-t border-gray-100 pt-4 mb-4">
+                  <div className="flex justify-between items-center text-lg">
+                    <span className="text-gray-600">Total Price:</span>
+                    <span className="font-bold text-green-600">
+                      {(parseFloat(selectedToken.metadata?.pricePerCredit || '10') * selectedToken.amount).toFixed(2)} XRP
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 rounded-lg p-3 mb-4 text-sm text-blue-700">
+                  <p>💡 <strong>How it works:</strong> Your purchase request will be sent to the issuer. 
+                  Once they create a secure escrow, your payment will be processed automatically.</p>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleCloseModal}
+                    className="flex-1 px-4 py-3 border border-gray-200 rounded-xl hover:bg-gray-50 font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleConfirmPurchase(selectedToken)}
+                    disabled={buying}
+                    className="flex-1 px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
                     <ShoppingCart className="w-4 h-4" />
-                    Confirm Purchase
-                  </>
-                )}
-              </button>
-            </div>
+                    Send Purchase Request
+                  </button>
+                </div>
+              </>
+            )}
+
+            {purchaseStep === 'waiting' && (
+              <div className="text-center py-8">
+                <Loader2 className="w-12 h-12 text-green-600 animate-spin mx-auto mb-4" />
+                <h4 className="text-lg font-medium text-gray-900 mb-2">Waiting for Issuer</h4>
+                <p className="text-gray-500 mb-4">
+                  Your purchase request has been sent. The issuer will create a secure escrow for your tokens.
+                </p>
+                <div className="bg-yellow-50 rounded-lg p-3 text-sm text-yellow-700">
+                  ⏳ Once the escrow is ready, payment will process automatically.
+                </div>
+              </div>
+            )}
+
+            {purchaseStep === 'paying' && (
+              <div className="text-center py-8">
+                <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+                <h4 className="text-lg font-medium text-gray-900 mb-2">Processing Payment</h4>
+                <p className="text-gray-500">
+                  Sending XRP to complete the escrow...
+                </p>
+              </div>
+            )}
+
+            {purchaseStep === 'done' && (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="w-10 h-10 text-green-600" />
+                </div>
+                <h4 className="text-lg font-medium text-gray-900 mb-2">Purchase Complete!</h4>
+                <p className="text-gray-500 mb-4">
+                  You have successfully purchased {selectedToken.amount} carbon credit(s) from {selectedToken.metadata?.projectName || 'this project'}.
+                </p>
+                <button
+                  onClick={handleCloseModal}
+                  className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 font-medium transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
