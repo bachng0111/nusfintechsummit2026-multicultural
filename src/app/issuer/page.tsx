@@ -11,14 +11,33 @@ const DEVNET_EXPLORER_URL = 'https://devnet.xrpl.org'
  * In production, this would upload to Pinata/IPFS
  * Returns a dummy CID hash
  */
-async function mockUploadToIPFS(file: File): Promise<string> {
-  // Simulate upload delay
-  await new Promise((resolve) => setTimeout(resolve, 1500))
+async function uploadToIPFS(file: File): Promise<string> {
+  const PINATA_JWT = process.env.NEXT_PUBLIC_PINATA_JWT
   
-  // Return a dummy IPFS hash (CID)
-  const dummyCID = `QmT5NvUtoM5nWFfrQdVrFtvGfKFmG7AHE8P34isapyhCxX`
-  console.log(`[Mock IPFS] Uploaded ${file.name} -> ${dummyCID}`)
-  return dummyCID
+  if (!PINATA_JWT) {
+    // Fallback to mock if not configured
+    console.warn('[IPFS] Pinata JWT not configured, using mock upload')
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    return `QmT5NvUtoM5nWFfrQdVrFtvGfKFmG7AHE8P34isapyhCxX`
+  }
+
+  // Create FormData for Pinata upload
+  const formData = new FormData()
+  formData.append('file', file)
+  
+  // Upload to Pinata
+  const response = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${PINATA_JWT}`
+    },
+    body: formData
+  })
+
+  const result = await response.json()
+  const ipfsHash = result.IpfsHash  // Get REAL IPFS hash
+  
+  return ipfsHash
 }
 
 /**
@@ -180,7 +199,7 @@ export default function IssuerPage() {
 
     try {
       // Step 1: Upload to IPFS (mocked)
-      const ipfsHash = await mockUploadToIPFS(pdfFile)
+      const ipfsHash = await uploadToIPFS(pdfFile)
       setResult((prev) => ({ ...prev, ipfsHash }))
 
       // Step 2: Connect to XRPL
