@@ -3,8 +3,7 @@
 > **A transparent, trust-minimized carbon credit marketplace built on the XRP Ledger (XRPL)**
 
 **Hackathon**: NUS FinTech Summit 2026 – Ripple XRPL Challenge  
-**Bounty Track**: BGA (Blockchain for Good & SDGs), Ripple Bounty: Feedback Challenge
-**Submission Deadline**: Jan 9, 2026 – 9:00 AM (SGT)
+**Bounty Track**: BGA (Blockchain for Good & SDGs)
 
 **Team Members**
 
