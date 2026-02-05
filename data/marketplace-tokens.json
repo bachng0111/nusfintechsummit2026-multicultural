@@ -1,0 +1,20 @@
+[
+  {
+    "issuanceId": "0034DDC265B0629E91198637E57704B0363B1D72B2430ADD",
+    "address": "rwGgYq7fk1nDMkoWjxcTBwGVZEjKwcZEUr",
+    "metadata": {
+      "projectName": "Zeng Zheqi",
+      "creditType": "Carbon Offset",
+      "vintage": "2026",
+      "certification": "VCS",
+      "location": "Global",
+      "description": "Carbon credit token for Zeng Zheqi. Audit report available via IPFS.",
+      "pricePerCredit": "0.1"
+    },
+    "amount": 100,
+    "timestamp": "2026-02-05T13:20:08.988Z",
+    "txHash": "713150608971DB32878F6BDE01A5679F073A37E82B9BF955FF925421DD7B5579",
+    "explorerUrl": "https://devnet.xrpl.org/mpt/0034DDC265B0629E91198637E57704B0363B1D72B2430ADD",
+    "ipfsHash": "QmT5NvUtoM5nWFfrQdVrFtvGfKFmG7AHE8P34isapyhCxX"
+  }
+]

@@ -67,16 +67,10 @@ export default function BuyerAccountPage() {
         allTokensForLookup = archiveRaw ? JSON.parse(archiveRaw) : [];
       }
 
-      // Get retirement certificates from Supabase API
-      let retirementCerts: RetirementCertificate[] = [];
-      try {
-        retirementCerts = await fetchRetirementsByOwner(address);
-      } catch (apiErr) {
-        console.warn('[Account] Failed to fetch retirements from API, falling back to localStorage:', apiErr);
-        // Fallback to localStorage if API fails
-        const retirementCertsRaw = localStorage.getItem('retirementCertificates');
-        retirementCerts = retirementCertsRaw ? JSON.parse(retirementCertsRaw) : [];
-      }
+      // Get retirement certificates to check retired status and preserve original values
+      const retirementCertsRaw = localStorage.getItem('retirementCertificates');
+      const retirementCerts: { mptIssuanceId: string; amount: string; retiredAt: string; txHash: string }[] = 
+        retirementCertsRaw ? JSON.parse(retirementCertsRaw) : [];
       const retiredTokenMap = new Map(retirementCerts.map(cert => [cert.mptIssuanceId, cert]));
 
       // Get completed purchase requests for this buyer
@@ -124,7 +118,7 @@ export default function BuyerAccountPage() {
           mptIssuanceId: issuanceId,
           currency: matchedToken?.metadata?.creditType || 'CARBON',
           value: value,
-          issuer: matchedToken?.address || purchase?.issuerAddress || retirementCert?.issuer || '',
+          issuer: matchedToken?.address || mpt.issuer || 'Unknown',
           name: matchedToken?.metadata?.projectName || `Carbon Credit ${issuanceId.slice(0, 8)}...`,
           projectName: matchedToken?.metadata?.projectName,
           pricePerCredit: matchedToken?.metadata?.pricePerCredit,

@@ -6,7 +6,7 @@ import { AlertCircle, Loader2, RefreshCw, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { RetireTokenButton } from '@/components/buyer/RetireTokenButton';
 import { getRequestsForBuyer, PurchaseRequest } from '@/lib/escrow';
-import { fetchAllArchivedTokens, fetchRetirementsByOwner, MintedToken, RetirementCertificate } from '@/lib/tokens-api';
+import { fetchAllArchivedTokens, MintedToken } from '@/lib/tokens-api';
 
 // XRPL Devnet explorer URL
 const DEVNET_EXPLORER_URL = 'https://devnet.xrpl.org';
@@ -39,6 +39,26 @@ interface TokenBalance {
   uris?: { category: string; title: string; uri: string }[];
 }
 
+// Minted token structure from localStorage
+interface MintedToken {
+  issuanceId: string;
+  address: string;
+  metadata: {
+    projectName: string;
+    creditType: string;
+    vintage: string;
+    certification: string;
+    location: string;
+    description: string;
+    pricePerCredit: string;
+  };
+  amount: number;
+  timestamp: string;
+  txHash: string;
+  explorerUrl: string;
+  ipfsHash: string;
+}
+
 export default function BuyerAccountPage() {
   const { address, isConnected, balance, getClient, refreshBalance } = useWallet();
   const [tokens, setTokens] = useState<TokenBalance[]>([]);
@@ -46,7 +66,7 @@ export default function BuyerAccountPage() {
   const [error, setError] = useState<string | null>(null);
   const [rlusdBalance, setRlusdBalance] = useState<string | null>(null);
 
-  // Fetch tokens from XRPL and merge with API metadata
+  // Fetch tokens from XRPL and merge with localStorage metadata
   const fetchAccountTokens = useCallback(async () => {
     if (!address) return;
     setLoading(true);
@@ -56,27 +76,14 @@ export default function BuyerAccountPage() {
     try {
       client = await getClient();
 
-      // Get all minted tokens from permanent archive via API (for metadata lookup)
-      let allTokensForLookup: MintedToken[] = [];
-      try {
-        allTokensForLookup = await fetchAllArchivedTokens();
-      } catch (apiErr) {
-        console.warn('[Account] Failed to fetch from API, falling back to localStorage:', apiErr);
-        // Fallback to localStorage if API fails
-        const archiveRaw = localStorage.getItem('allMintedTokensArchive');
-        allTokensForLookup = archiveRaw ? JSON.parse(archiveRaw) : [];
-      }
+      // Get all minted tokens from permanent archive (never removed, for metadata lookup)
+      const archiveRaw = localStorage.getItem('allMintedTokensArchive');
+      const allTokensForLookup: MintedToken[] = archiveRaw ? JSON.parse(archiveRaw) : [];
 
-      // Get retirement certificates from Supabase API
-      let retirementCerts: RetirementCertificate[] = [];
-      try {
-        retirementCerts = await fetchRetirementsByOwner(address);
-      } catch (apiErr) {
-        console.warn('[Account] Failed to fetch retirements from API, falling back to localStorage:', apiErr);
-        // Fallback to localStorage if API fails
-        const retirementCertsRaw = localStorage.getItem('retirementCertificates');
-        retirementCerts = retirementCertsRaw ? JSON.parse(retirementCertsRaw) : [];
-      }
+      // Get retirement certificates to check retired status and preserve original values
+      const retirementCertsRaw = localStorage.getItem('retirementCertificates');
+      const retirementCerts: { mptIssuanceId: string; amount: string; retiredAt: string; txHash: string }[] = 
+        retirementCertsRaw ? JSON.parse(retirementCertsRaw) : [];
       const retiredTokenMap = new Map(retirementCerts.map(cert => [cert.mptIssuanceId, cert]));
 
       // Get completed purchase requests for this buyer
@@ -124,7 +131,7 @@ export default function BuyerAccountPage() {
           mptIssuanceId: issuanceId,
           currency: matchedToken?.metadata?.creditType || 'CARBON',
           value: value,
-          issuer: matchedToken?.address || purchase?.issuerAddress || retirementCert?.issuer || '',
+          issuer: matchedToken?.address || mpt.issuer || 'Unknown',
           name: matchedToken?.metadata?.projectName || `Carbon Credit ${issuanceId.slice(0, 8)}...`,
           projectName: matchedToken?.metadata?.projectName,
           pricePerCredit: matchedToken?.metadata?.pricePerCredit,

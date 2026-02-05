@@ -426,10 +426,6 @@ export default function IssuerPage() {
 
       console.log(`[MPT] Created successfully with issuance ID: ${mptIssuanceId}`)
       
-      if (!mptIssuanceId) {
-        throw new Error('Failed to get MPT Issuance ID from transaction response')
-      }
-
       const tokenData = {
         issuanceId: mptIssuanceId,
         address,

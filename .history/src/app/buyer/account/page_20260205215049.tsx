@@ -124,7 +124,7 @@ export default function BuyerAccountPage() {
           mptIssuanceId: issuanceId,
           currency: matchedToken?.metadata?.creditType || 'CARBON',
           value: value,
-          issuer: matchedToken?.address || purchase?.issuerAddress || retirementCert?.issuer || '',
+          issuer: matchedToken?.address || mpt.issuer || 'Unknown',
           name: matchedToken?.metadata?.projectName || `Carbon Credit ${issuanceId.slice(0, 8)}...`,
           projectName: matchedToken?.metadata?.projectName,
           pricePerCredit: matchedToken?.metadata?.pricePerCredit,

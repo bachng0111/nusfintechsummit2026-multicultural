@@ -55,7 +55,7 @@ export const getTokens = async (): Promise<Token[]> => {
     }
 
     const tokensData = await tokensRes.json();
-    const allTokens: Token[] = tokensData.tokens || [];
+    const allTokens = tokensData.tokens || [];
 
     // Fetch retirement certificates to determine retired status
     const retirementsRes = await fetch('/api/retirements', {
@@ -64,11 +64,10 @@ export const getTokens = async (): Promise<Token[]> => {
       cache: 'no-store',
     });
 
-    let retirements: any[] = [];
     let retiredTokenIds = new Set<string>();
     if (retirementsRes.ok) {
       const retirementsData = await retirementsRes.json();
-      retirements = retirementsData.retirements || [];
+      const retirements = retirementsData.retirements || [];
       retiredTokenIds = new Set(retirements.map((r: any) => r.mptIssuanceId));
     }
 
@@ -86,11 +85,8 @@ export const getTokens = async (): Promise<Token[]> => {
       availableTokenIds = new Set(availableTokens.map((t: any) => t.issuanceId));
     }
 
-    // Create a map of existing tokens by issuanceId
-    const tokenMap = new Map<string, Token>();
-    
-    // Add all tokens from archive with status
-    allTokens.forEach((token: Token) => {
+    // Add status to each token
+    const tokensWithStatus: Token[] = allTokens.map((token: Token) => {
       let status: 'Listed' | 'Purchased' | 'Retired' = 'Listed';
       
       if (retiredTokenIds.has(token.issuanceId)) {
@@ -99,37 +95,10 @@ export const getTokens = async (): Promise<Token[]> => {
         status = 'Purchased';
       }
 
-      tokenMap.set(token.issuanceId, { ...token, status });
+      return { ...token, status };
     });
 
-    // Add retired tokens that aren't in the archive (for tokens retired before Supabase migration)
-    retirements.forEach((retirement: any) => {
-      if (!tokenMap.has(retirement.mptIssuanceId)) {
-        // Create a token entry from retirement certificate data
-        const retiredToken: Token = {
-          issuanceId: retirement.mptIssuanceId,
-          address: retirement.issuer || '',
-          metadata: {
-            projectName: `Retired Credit`,
-            creditType: retirement.currency || 'CARBON',
-            vintage: '',
-            certification: '',
-            location: '',
-            description: `Retired on ${new Date(retirement.retiredAt).toLocaleDateString()}`,
-            pricePerCredit: '',
-          },
-          amount: parseFloat(retirement.amount) || 0,
-          timestamp: retirement.retiredAt,
-          txHash: retirement.txHash || '',
-          explorerUrl: `https://devnet.xrpl.org/transactions/${retirement.txHash}`,
-          ipfsHash: '',
-          status: 'Retired',
-        };
-        tokenMap.set(retirement.mptIssuanceId, retiredToken);
-      }
-    });
-
-    return Array.from(tokenMap.values());
+    return tokensWithStatus;
   } catch (error) {
     console.error('Failed to fetch tokens from Supabase:', error);
     

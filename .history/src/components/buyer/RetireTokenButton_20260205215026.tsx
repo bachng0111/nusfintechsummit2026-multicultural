@@ -75,13 +75,6 @@ export function RetireTokenButton({
       return;
     }
 
-    // Validate issuer address is a valid XRPL address (starts with 'r' and is 25-35 chars)
-    if (!issuer || !issuer.startsWith('r') || issuer.length < 25 || issuer.length > 35) {
-      setError('Invalid issuer address. Token metadata may be missing.');
-      setIsRetiring(false);
-      return;
-    }
-
     let client: xrpl.Client | null = null;
 
     try {
